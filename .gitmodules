@@ -1,3 +1,6 @@
+[submodule "3rdparty/The-Forge"]
+	path = 3rdparty/The-Forge
+	url = git@github.com:PixelJuiceGames/The-Forge.git
 [submodule "3rdparty/SDL"]
 	path = 3rdparty/SDL
 	url = git@github.com:libsdl-org/SDL.git

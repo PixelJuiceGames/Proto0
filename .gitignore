@@ -2,4 +2,5 @@
 *.vcxproj.filters
 *.vcxproj.user
 x64
-Content
+Content/*
+!Content/PathStatement.Windows.txt

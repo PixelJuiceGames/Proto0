@@ -1,12 +1,12 @@
 RD_SHADER_BINARIES = CompiledShaders/
 RD_PIPELINE_CACHE = PipelineCaches/
-RD_TEXTURES = ../../../../../../Art/Textures/dds/
-RD_COMPILED_MATERIALS = CompiledMaterials/
-RD_MESHES = ../../../../../../Art/Meshes/
-RD_FONTS = ../../../../../../Art/Fonts/
-RD_ANIMATIONS = ../../../../../../Art/Animation/
-RD_AUDIO = ../../../../../../Art/Audio/
-RD_SCRIPTS = Scripts/
+RD_TEXTURES = Content/
+RD_COMPILED_MATERIALS = Content/
+RD_MESHES = Content/
+RD_FONTS = Content/
+RD_ANIMATIONS = Content/
+RD_AUDIO = Content/
+RD_SCRIPTS = Content/
 
 RD_SCREENSHOTS = Screenshots/
 RD_DEBUG = Debug/

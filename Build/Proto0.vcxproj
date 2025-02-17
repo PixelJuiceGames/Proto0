@@ -46,18 +46,18 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)\$(Platform)\$(Configuration)\Intermediate\$(ProjectName)\</IntDir>
-    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(SolutionDir)..\3rdParty\fast_obj;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)\$(Platform)\$(Configuration)\Intermediate\$(ProjectName)\</IntDir>
-    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(SolutionDir)..\3rdParty\fast_obj;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <LanguageStandard_C>Default</LanguageStandard_C>
@@ -82,7 +82,7 @@ xcopy "$(SolutionDir)..\3rdParty\The-Forge\Common_3\OS\Windows\pc_gpu.data" "$(O
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <LanguageStandard_C>Default</LanguageStandard_C>

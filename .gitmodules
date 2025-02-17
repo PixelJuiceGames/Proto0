@@ -4,3 +4,6 @@
 [submodule "3rdparty/SDL"]
 	path = 3rdparty/SDL
 	url = git@github.com:libsdl-org/SDL.git
+[submodule "3rdparty/fast_obj"]
+	path = 3rdparty/fast_obj
+	url = git@github.com:thisistherk/fast_obj.git

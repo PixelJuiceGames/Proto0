@@ -30,7 +30,8 @@
     "SAMPLER(s0, numDescriptors = unbounded, space = " #space ", offset = 0)),"
 
 #define DefaultRootSignature                                                                                                         \
-    "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT)," DESCRIPTOR_TABLE(3) DESCRIPTOR_TABLE(2) DESCRIPTOR_TABLE(1) DESCRIPTOR_TABLE(0) \
+    "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED),"                                                                                  \
+        DESCRIPTOR_TABLE(3) DESCRIPTOR_TABLE(2) DESCRIPTOR_TABLE(1) DESCRIPTOR_TABLE(0)                                              \
         SAMPLER_DESCRIPTOR_TABLE(                                                                                                    \
             0) "StaticSampler(s0, space = 100,"                                                                                      \
                "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                                  \
@@ -70,11 +71,21 @@
 
 #if defined(__cplusplus)
 typedef struct { float m[16]; } float4x4;
+typedef uint32_t uint;
 #endif
+
+struct MeshVertex
+{
+    float3 position;
+    float3 normal;
+    float3 color;
+    float2 uv;
+};
 
 struct Frame
 {
 	float4x4 projViewMat;
+    uint vertexBufferIndex;
 };
 
 #endif // _SHADER_GLOBALS

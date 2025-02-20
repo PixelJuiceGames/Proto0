@@ -26,7 +26,7 @@ function CreateShaderRule(inRuleName, inProfile, entryPoint, flags, inInputPath)
     table.insert(Rule, rule)
 end
 
-CreateShaderRule("Shader VS", "vs_6_4", "main", "-Qstrip_rootsignature", "*.vert.hlsl")
-CreateShaderRule("Shader PS", "ps_6_4", "main", "-Qstrip_rootsignature", "*.pixel.hlsl")
-CreateShaderRule("Shader CS", "cs_6_4", "main", "-Qstrip_rootsignature", "*.comp.hlsl")
+CreateShaderRule("Shader VS", "vs_6_6", "main", "-Qstrip_rootsignature", "*.vert.hlsl")
+CreateShaderRule("Shader PS", "ps_6_6", "main", "-Qstrip_rootsignature", "*.pixel.hlsl")
+CreateShaderRule("Shader CS", "cs_6_6", "main", "-Qstrip_rootsignature", "*.comp.hlsl")
 CreateShaderRule("Root Signature", "rootsig_1_1", "DefaultRootSignature", "", "*.rs.hlsl")

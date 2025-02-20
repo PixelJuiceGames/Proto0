@@ -69,11 +69,13 @@ struct RendererGeometry
 	uint32_t numIndices = 0;
 };
 
+const uint32_t gDataBufferCount = 2;
+
 struct AppState
 {
 	SDL_Window* window = NULL;
 
-	uint32_t dataBufferCount = 2;
+	uint32_t frameIndex = 0;
 
 	::Renderer* renderer = NULL;
 	::Queue* graphicsQueue = NULL;
@@ -86,6 +88,7 @@ struct AppState
 	::Buffer* vertexBuffer = NULL;
 	::Buffer* indexBuffer = NULL;
 
+	::Buffer* frameUniformBuffers[gDataBufferCount] = { NULL };
 	::Shader* uberShader = NULL;
 	::DescriptorSet* uniformDescriptorSet = NULL;
 	::Pipeline* uberPipeline = NULL; 
@@ -137,7 +140,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
-    if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_QUIT)
+    if (event->type == SDL_EVENT_QUIT)
     {
         return SDL_APP_SUCCESS;
     }
@@ -171,8 +174,6 @@ bool renderer_Initialize(AppState* appState)
 		SDL_Log("AppState has not been initialized");
 		return false;
 	}
-
-	appState->dataBufferCount = 2;
 
 	// Initialize Memory Allocation System
 	{
@@ -224,7 +225,7 @@ bool renderer_Initialize(AppState* appState)
 
 		::GpuCmdRingDesc cmdRingDesc = {};
 		cmdRingDesc.pQueue = appState->graphicsQueue;
-		cmdRingDesc.mPoolCount = appState->dataBufferCount;
+		cmdRingDesc.mPoolCount = gDataBufferCount;
 		cmdRingDesc.mCmdPerPoolCount = 1;
 		cmdRingDesc.mAddSyncPrimitives = true;
 		::initGpuCmdRing(appState->renderer, &cmdRingDesc, &appState->graphicsCmdRing);
@@ -237,6 +238,22 @@ bool renderer_Initialize(AppState* appState)
 	::RootSignatureDesc rootDesc = {};
 	rootDesc.pGraphicsFileName = "DefaultRootSignature.rs";
 	::initRootSignature(appState->renderer, &rootDesc);
+
+	//
+	{
+		::BufferLoadDesc ubDesc = {};
+		ubDesc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		ubDesc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_CPU_TO_GPU;
+		ubDesc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_PERSISTENT_MAP_BIT;
+		ubDesc.mDesc.pName = "Frame Uniform Buffer";
+		ubDesc.mDesc.mSize = sizeof(Frame);
+		ubDesc.pData = NULL;
+		for (uint32_t i = 0; i < gDataBufferCount; ++i)
+		{
+			ubDesc.ppBuffer = &appState->frameUniformBuffers[i];
+			::addResource(&ubDesc, NULL);
+		}
+	}
 
 	if (!renderer_OnLoad(appState, { ::RELOAD_TYPE_ALL }))
 	{
@@ -255,7 +272,7 @@ bool renderer_Initialize(AppState* appState)
 	assert(appState->geometry.indices);
 	memset(appState->geometry.indices, 0, sizeof(uint32_t) * maxIndices);
 
-	const char* axisCalibratorPath = "Content/Models/AxisCalibrator.obj";
+	const char* axisCalibratorPath = "Content/Models/Cube.obj";
 	renderer_LoadGeometry(&appState->geometry, axisCalibratorPath);
 
 	{
@@ -274,9 +291,9 @@ bool renderer_Initialize(AppState* appState)
 		ibDesc.pData = appState->geometry.indices;
 		ibDesc.ppBuffer = &appState->indexBuffer;
 		::addResource(&ibDesc, NULL);
-
-		::waitForAllResourceLoads();
 	}
+
+	::waitForAllResourceLoads();
 
 	return true;
 }
@@ -298,6 +315,10 @@ void renderer_Exit(AppState* appState)
 
 	::removeResource(appState->vertexBuffer);
 	::removeResource(appState->indexBuffer);
+	for (uint32_t i = 0; i < gDataBufferCount; ++i)
+	{
+		::removeResource(appState->frameUniformBuffers[i]);
+	}
 
 	::exitGpuCmdRing(appState->renderer, &appState->graphicsCmdRing);
 	::exitSemaphore(appState->renderer, appState->imageAcquiredSemaphore);
@@ -474,9 +495,47 @@ void renderer_Draw(AppState* appState)
 	bindRenderTargets.mRenderTargets[0].mLoadAction = ::LOAD_ACTION_CLEAR;
 	bindRenderTargets.mRenderTargets[0].mClearValue = { 0.3f, 0.3f, 0.3f, 1.0f };
 	bindRenderTargets.mRenderTargets[0].mOverrideClearValue = true;
+	bindRenderTargets.mDepthStencil.mLoadAction = ::LOAD_ACTION_CLEAR;
+	bindRenderTargets.mDepthStencil.pDepthStencil = appState->depthBuffer;
+
 	::cmdBindRenderTargets(cmd, &bindRenderTargets);
 	::cmdSetViewport(cmd, 0.0f, 0.0f, (float)windowWidth, (float)windowHeight, 0.0f, 1.0f);
 	::cmdSetScissor(cmd, 0, 0, (uint32_t)windowWidth, (uint32_t)windowHeight);
+
+	// Render commands
+	{
+		::mat4 viewMat = ::mat4::lookAtRH({3.0f, -3.0f, 3.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+		::mat4 projMat = ::mat4::perspectiveRH(1.0471f, windowHeight / (float)windowWidth, 100.0f, 0.01f);
+		::mat4 projViewMat = projMat * viewMat;
+		Frame frameData = {};
+		frameData.projViewMat.m[0] = projViewMat.getCol(0).getX();
+		frameData.projViewMat.m[1] = projViewMat.getCol(0).getY();
+		frameData.projViewMat.m[2] = projViewMat.getCol(0).getZ();
+		frameData.projViewMat.m[3] = projViewMat.getCol(0).getW();
+		frameData.projViewMat.m[4] = projViewMat.getCol(1).getX();
+		frameData.projViewMat.m[5] = projViewMat.getCol(1).getY();
+		frameData.projViewMat.m[6] = projViewMat.getCol(1).getZ();
+		frameData.projViewMat.m[7] = projViewMat.getCol(1).getW();
+		frameData.projViewMat.m[8] = projViewMat.getCol(2).getX();
+		frameData.projViewMat.m[9] = projViewMat.getCol(2).getY();
+		frameData.projViewMat.m[10] = projViewMat.getCol(2).getZ();
+		frameData.projViewMat.m[11] = projViewMat.getCol(2).getW();
+		frameData.projViewMat.m[12] = projViewMat.getCol(3).getX();
+		frameData.projViewMat.m[13] = projViewMat.getCol(3).getY();
+		frameData.projViewMat.m[14] = projViewMat.getCol(3).getZ();
+		frameData.projViewMat.m[15] = projViewMat.getCol(3).getW();
+
+		::BufferUpdateDesc desc = { appState->frameUniformBuffers[appState->frameIndex] };
+		::beginUpdateResource(&desc);
+		memcpy(desc.pMappedData, &frameData, sizeof(frameData));
+		::endUpdateResource(&desc);
+
+		const uint32_t vertexBufferStrides = sizeof(MeshVertex);
+		::cmdBindPipeline(cmd, appState->uberPipeline);
+		::cmdBindDescriptorSet(cmd, appState->frameIndex, appState->uniformDescriptorSet);
+		::cmdBindVertexBuffer(cmd, 1, &appState->vertexBuffer, &vertexBufferStrides, NULL);
+		::cmdDraw(cmd, appState->geometry.numVertices, 0);
+	}
 
 	barriers[0] = { renderTarget, ::RESOURCE_STATE_RENDER_TARGET, ::RESOURCE_STATE_PRESENT };
 	::cmdResourceBarrier(cmd, 0, NULL, 0, NULL, 1, barriers);
@@ -506,6 +565,8 @@ void renderer_Draw(AppState* appState)
 	presentDesc.mSubmitDone = true;
 
 	::queuePresent(appState->graphicsQueue, &presentDesc);
+
+	appState->frameIndex = (appState->frameIndex + 1) % gDataBufferCount;
 }
 
 // TODO(gmodarelli): Use scratch vertex and index buffers and generate proper
@@ -582,15 +643,24 @@ void renderer_RemoveShaders(AppState* appState)
 void renderer_AddDescriptorSets(AppState* appState)
 {
 	::DescriptorSetDesc desc = {};
-	desc.mNodeIndex = ROOT_PARAM_PerFrame;
-	desc.mMaxSets = appState->dataBufferCount;
+	desc.mIndex = ROOT_PARAM_PerFrame;
+	desc.mMaxSets = gDataBufferCount;
 	desc.mNodeIndex = 0;
 	desc.mDescriptorCount = 1;
 	desc.pDescriptors = SRT_UberShaderData::PerFramePtr();
 	::addDescriptorSet(appState->renderer, &desc, &appState->uniformDescriptorSet);
 }
 
-void renderer_PrepareDescriptorSets(AppState* appState){}
+void renderer_PrepareDescriptorSets(AppState* appState)
+{
+	for (uint32_t i = 0; i < gDataBufferCount; ++i)
+	{
+		DescriptorData uParams[1] = {};
+		uParams[0].mIndex = (offsetof(SRT_UberShaderData::PerFrame, CB0)) / sizeof(::Descriptor);
+		uParams[0].ppBuffers = &appState->frameUniformBuffers[i];
+		updateDescriptorSet(appState->renderer, i, appState->uniformDescriptorSet, 1, uParams);
+	}
+}
 
 void renderer_RemoveDescriptorSets(AppState* appState)
 {

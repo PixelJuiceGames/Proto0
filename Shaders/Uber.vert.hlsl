@@ -1,5 +1,6 @@
 #include "UberResources.hlsli"
 
+[RootSignature(DefaultRootSignature)]
 Varyings main(Attributes attributes)
 {
     Varyings varyings = (Varyings) 0;

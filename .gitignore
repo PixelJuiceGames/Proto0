@@ -4,3 +4,6 @@
 x64
 Content/*
 !Content/PathStatement.Windows.txt
+Tools/AssetCooker/Cache
+Tools/AssetCooker/Logs
+Tools/AssetCooker/imgui.ini

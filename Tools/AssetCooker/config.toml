@@ -1,0 +1,25 @@
+LogFSActivity = "Normal"
+NumCookingThreads = -1 # Auto
+RuleFile = "rules.lua"
+StartPaused = true
+WindowTitle = "Asset Cooker - Proto 0"
+
+[[Repo]]
+Name = "Source"
+Path = '..\..\Content'
+
+[[Repo]]
+Name = "Shaders"
+Path = '..\..\Shaders'
+
+[[Repo]]
+Name = "Bin"
+Path = '..\..\Build\x64\Debug\Content'
+
+[[Repo]]
+Name = "Tools"
+Path = '..\..\Tools'
+
+[[Repo]]
+Name = "Intermediate"
+Path = '..\..\Build\x64\Debug\Intermediate'

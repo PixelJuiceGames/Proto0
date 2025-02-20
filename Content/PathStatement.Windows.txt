@@ -1,4 +1,4 @@
-RD_SHADER_BINARIES = CompiledShaders/
+RD_SHADER_BINARIES = Content/CompiledShaders/
 RD_PIPELINE_CACHE = PipelineCaches/
 RD_TEXTURES = Content/
 RD_COMPILED_MATERIALS = Content/

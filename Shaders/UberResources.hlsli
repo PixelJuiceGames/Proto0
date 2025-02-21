@@ -1,15 +1,7 @@
-#ifndef _UBER_RESOURCES_HLSLI
-#define _UBER_RESOURCES_HLSLI
+#ifndef _COMMON_HLSLI
+#define _COMMON_HLSLI
 
 #include "ShaderGlobals.h"
-
-struct Attributes
-{
-    float3 Position : POSITION;
-    float3 Normal : NORMAL;
-    float3 Color : COLOR;
-    float2 Texcoord0 : TEXCOORD0;
-};
 
 struct Varyings
 {
@@ -18,7 +10,10 @@ struct Varyings
     float3 NormalWS : NORMAL;
     float3 Color : COLOR;
     float2 Texcoord0 : TEXCOORD0;
+    uint instanceID : SV_InstanceID;
 };
+
+SamplerState gLinearRepeatSampler : register(s0, SPACE_Persistent);
 
 cbuffer CB0 : register(b0, SPACE_PerFrame)
 {
@@ -30,4 +25,4 @@ cbuffer CB0 : register(b0, SPACE_PerFrame)
 //
 //}
 
-#endif // _UBER_RESOURCES_HLSLI
+#endif // _COMMON_HLSLI

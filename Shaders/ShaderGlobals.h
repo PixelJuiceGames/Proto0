@@ -74,6 +74,8 @@ typedef struct { float m[16]; } float4x4;
 typedef uint32_t uint;
 #endif
 
+#define INVALID_BINDLESS_INDEX (uint)-1
+
 struct MeshVertex
 {
     float3 position;
@@ -82,10 +84,37 @@ struct MeshVertex
     float2 uv;
 };
 
+struct GPUMaterial
+{
+    float4 baseColor;
+    uint albedoTextureIndex;
+    uint normalTextureIndex;
+    uint ormTextureIndex;
+    uint emissiveTextureIndex;
+};
+
+struct GPUInstance
+{
+    float4x4 worldMat;
+    uint materialBufferOffset;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
+
 struct Frame
 {
 	float4x4 projViewMat;
     uint vertexBufferIndex;
+    uint instanceBufferIndex;
+    uint materialBufferIndex;
 };
+
+#if !defined(__cplusplus)
+bool HasValidTexture(uint textureBindlessIndex)
+{
+    return textureBindlessIndex != INVALID_BINDLESS_INDEX;
+}
+#endif
 
 #endif // _SHADER_GLOBALS

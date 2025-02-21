@@ -19,6 +19,12 @@
 #include <Utilities/Interfaces/IMemory.h>
 #include <Utilities/RingBuffer.h>
 
+extern "C"
+{
+	__declspec(dllexport) extern const UINT D3D12SDKVersion = 715;
+	__declspec(dllexport) extern const char* D3D12SDKPath = "";
+}
+
 // Shader Interop
 
 #include <ShaderGlobals.h>

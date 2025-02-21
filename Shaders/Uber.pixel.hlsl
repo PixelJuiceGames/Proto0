@@ -19,5 +19,19 @@ float4 main(Varyings varyings) : SV_Target0
         albedo.rgb *= albedoSample.rgb;
     }
     
+    float3 emission = 0;
+    if (HasValidTexture(material.emissiveTextureIndex))
+    {
+        Texture2D emissiveTexture = ResourceDescriptorHeap[material.emissiveTextureIndex];
+        float4 emissiveSample = emissiveTexture.Sample(gLinearRepeatSampler, varyings.Texcoord0);
+        emission += emissiveSample.rgb;
+    }
+    
+    float3 N = normalize(varyings.NormalWS);
+    float3 L = -normalize(g_Frame.sunDirection.xyz);
+    float NdotL = max(0.0f, dot(N, L));
+    albedo.rgb *= NdotL * g_Frame.sunColor.rgb * g_Frame.sunColor.a;
+    albedo.rgb += emission;
+    
     return albedo;
 }

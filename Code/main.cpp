@@ -235,6 +235,11 @@ struct AppState
 	OrbitCamera orbitCamera;
 	bool cameraDragging = false;
 	::float2 lastMousePosition;
+
+	// Sun
+	::float3 sunDirection;
+	::float3 sunColor;
+	float sunIntensity;
 };
 
 bool renderer_Initialize(AppState* appState);
@@ -269,6 +274,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	as->orbitCamera.position = { 0.0f, -5.0f, 0.0f };
 	as->orbitCamera.lookAt = { 0.0f, 0.0f, 0.0f };
 	as->orbitCamera.updateViewMatrix();
+
+	as->sunDirection = { 1.0f, 0.0f, -1.0f };
+	as->sunColor = { 1.0f, 1.0f, 1.0f };
+	as->sunIntensity = 1.0f;
 
 	as->window = SDL_CreateWindow("Prototype 0", 1920, 1080, SDL_WINDOW_RESIZABLE);
 	if (!as->window)
@@ -325,6 +334,18 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		{
 			renderer_OnUnload(as, { ::RELOAD_TYPE_SHADER });
 			renderer_OnLoad(as, { ::RELOAD_TYPE_SHADER });
+		}
+
+		if (event->key.key == SDLK_P)
+		{
+			as->sunIntensity += 0.1f;
+			as->sunIntensity = as->sunIntensity > 10.0f ? 10.0f : as->sunIntensity;
+		}
+
+		if (event->key.key == SDLK_O)
+		{
+			as->sunIntensity -= 0.1f;
+			as->sunIntensity = as->sunIntensity < 0.0f ? 0.0f : as->sunIntensity;
 		}
 	}
 
@@ -903,6 +924,8 @@ void renderer_Draw(AppState* appState)
 			::mat4 projViewMat = projMat * appState->orbitCamera.viewMatrix;
 			Frame frameData = {};
 			loadMat4(projViewMat, &frameData.projViewMat.m[0]);
+			frameData.sunColor = { appState->sunColor.x, appState->sunColor.y, appState->sunColor.z, appState->sunIntensity };
+			frameData.sunDirection = { appState->sunDirection.x, appState->sunDirection.y, appState->sunDirection.z, 0.0f };
 			frameData.vertexBufferIndex = (uint32_t)appState->vertexBuffer->mDx.mDescriptors;
 			frameData.materialBufferIndex = (uint32_t)appState->materialBuffers[appState->frameIndex]->mDx.mDescriptors;
 			frameData.instanceBufferIndex = (uint32_t)appState->instanceBuffers[appState->frameIndex]->mDx.mDescriptors;

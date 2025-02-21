@@ -105,6 +105,8 @@ struct GPUInstance
 struct Frame
 {
 	float4x4 projViewMat;
+    float4 sunDirection;
+    float4 sunColor;
     uint vertexBufferIndex;
     uint instanceBufferIndex;
     uint materialBufferIndex;

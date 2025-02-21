@@ -80,6 +80,7 @@ struct MeshVertex
 {
     float3 position;
     float3 normal;
+    float4 tangent;
     float3 color;
     float2 uv;
 };
@@ -87,10 +88,17 @@ struct MeshVertex
 struct GPUMaterial
 {
     float4 baseColor;
+    float normalIntensity;
+    float occlusionFactor;
+    float roughnessFactor;
+    float metalnessFactor;
+    float emissiveFactor;
+    float reflectance;
     uint albedoTextureIndex;
     uint normalTextureIndex;
     uint ormTextureIndex;
     uint emissiveTextureIndex;
+    float2 _pad;
 };
 
 struct GPUInstance
@@ -105,6 +113,7 @@ struct GPUInstance
 struct Frame
 {
 	float4x4 projViewMat;
+    float4 cameraPosition;
     float4 sunDirection;
     float4 sunColor;
     uint vertexBufferIndex;

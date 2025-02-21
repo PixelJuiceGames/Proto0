@@ -8,6 +8,7 @@ struct Varyings
     float4 PositionCS : SV_Position;
     float3 PositionWS : POSITION;
     float3 NormalWS : NORMAL;
+    float4 TangentWS : TANGENT;
     float3 Color : COLOR;
     float2 Texcoord0 : TEXCOORD0;
     uint instanceID : SV_InstanceID;

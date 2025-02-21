@@ -11,6 +11,10 @@
 #define FAST_OBJ_IMPLEMENTATION
 #include <fast_obj.h>
 
+// MikkTSpace
+
+#include <mikktspace.h>
+
 // The-Forge
 
 #include <Graphics/Interfaces/IGraphics.h>
@@ -251,7 +255,6 @@ void renderer_RemoveSwapChain(AppState* appState);
 bool renderer_AddRenderTargets(AppState* appState);
 void renderer_RemoveRenderTargets(AppState* appState);
 void renderer_Draw(AppState* appState);
-void renderer_LoadGeometry(RendererGeometry* geometry, const char* path);
 void renderer_AddShaders(AppState* appState);
 void renderer_RemoveShaders(AppState* appState);
 void renderer_AddDescriptorSets(AppState* appState);
@@ -259,6 +262,8 @@ void renderer_PrepareDescriptorSets(AppState* appState);
 void renderer_RemoveDescriptorSets(AppState* appState);
 void renderer_AddPipelines(AppState* appState);
 void renderer_RemovePipelines(AppState* appState);
+
+void renderer_LoadGeometry(RendererGeometry* geometry, const char* path);
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 {
@@ -271,7 +276,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	memset(as, 0, sizeof(AppState));
 
 	*appstate = as;
-	as->orbitCamera.position = { 0.0f, -5.0f, 0.0f };
+	as->orbitCamera.position = { 0.0f, -3.5f, 0.0f };
 	as->orbitCamera.lookAt = { 0.0f, 0.0f, 0.0f };
 	as->orbitCamera.updateViewMatrix();
 
@@ -575,6 +580,12 @@ bool renderer_Initialize(AppState* appState)
 
 			GPUMaterial& material = appState->materials[0];
 			material.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+			material.normalIntensity = 1.0f;
+			material.occlusionFactor = 1.0f;
+			material.roughnessFactor = 1.0f;
+			material.metalnessFactor = 0.0f;
+			material.emissiveFactor = 2.0f;
+			material.reflectance = 0.5f;
 			material.albedoTextureIndex = appState->albedoTexture->mDx.mDescriptors;
 			material.normalTextureIndex = appState->normalTexture->mDx.mDescriptors;
 			material.ormTextureIndex = appState->ormTexture->mDx.mDescriptors;
@@ -585,7 +596,7 @@ bool renderer_Initialize(AppState* appState)
 			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
 			desc.mDesc.mSize = sizeof(GPUMaterial) * appState->numMaterials;
-			desc.mDesc.mElementCount = desc.mDesc.mSize / sizeof(uint32_t);
+			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
 			desc.mDesc.bBindless = true;
 			desc.pData = appState->materials;
 			desc.mDesc.pName = "Materials Buffer";
@@ -613,7 +624,7 @@ bool renderer_Initialize(AppState* appState)
 			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
 			desc.mDesc.mSize = sizeof(GPUInstance) * appState->numInstances;
-			desc.mDesc.mElementCount = desc.mDesc.mSize / sizeof(uint32_t);
+			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
 			desc.mDesc.bBindless = true;
 			desc.pData = appState->instances;
 			desc.mDesc.pName = "Instances Buffer";
@@ -651,7 +662,7 @@ bool renderer_Initialize(AppState* appState)
 		vbDesc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 		vbDesc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
 		vbDesc.mDesc.mSize = sizeof(MeshVertex) * appState->geometry.numVertices;
-		vbDesc.mDesc.mElementCount = vbDesc.mDesc.mSize / sizeof(uint32_t);
+		vbDesc.mDesc.mElementCount = (uint32_t)(vbDesc.mDesc.mSize / sizeof(uint32_t));
 		vbDesc.mDesc.bBindless = true;
 		vbDesc.pData = appState->geometry.vertices;
 		vbDesc.ppBuffer = &appState->vertexBuffer;
@@ -1015,61 +1026,6 @@ void renderer_Draw(AppState* appState)
 	appState->frameIndex = (appState->frameIndex + 1) % gDataBufferCount;
 }
 
-// TODO(gmodarelli): Use scratch vertex and index buffers and generate proper
-// indices with mesh_optimizer
-void renderer_LoadGeometry(RendererGeometry* geometry, const char* path)
-{
-	fastObjMesh* obj = fast_obj_read(path);
-	if (!obj)
-	{
-		return;
-	}
-
-	size_t indexCount = 0;
-	for (uint32_t i = 0; i < obj->face_count; ++i)
-	{
-		indexCount += 3 * (obj->face_vertices[i] - 2);
-	}
-
-	size_t vertexOffset = 0;
-	size_t indexOffset = 0;
-
-	for (uint32_t i = 0; i < obj->face_count; ++i)
-	{
-		assert(obj->face_vertices[i] == 3);
-
-		for (uint32_t j = 0; j < obj->face_vertices[i]; ++j)
-		{
-			fastObjIndex gi = obj->indices[indexOffset + j];
-
-			MeshVertex* v = &geometry->vertices[geometry->numVertices + vertexOffset++];
-			v->position.x = obj->positions[gi.p * 3 + 0];
-			v->position.y = obj->positions[gi.p * 3 + 1];
-			v->position.z = obj->positions[gi.p * 3 + 2];
-			v->color.x = obj->colors[gi.p * 3 + 0];
-			v->color.y = obj->colors[gi.p * 3 + 1];
-			v->color.z = obj->colors[gi.p * 3 + 2];
-			v->normal.x = obj->normals[gi.n * 3 + 0];
-			v->normal.y = obj->normals[gi.n * 3 + 1];
-			v->normal.z = obj->normals[gi.n * 3 + 2];
-			v->uv.x = obj->texcoords[gi.t * 2 + 0];
-			v->uv.y = 1.0f - obj->texcoords[gi.t * 2 + 1];
-		}
-
-		indexOffset += obj->face_vertices[i];
-	}
-
-	assert(vertexOffset == indexCount);
-	geometry->numVertices += (uint32_t)indexCount;
-
-	for (uint32_t i = 0; i < indexCount; ++i) {
-		geometry->indices[geometry->numIndices + i] = (uint32_t)i;
-	}
-	geometry->numIndices += (uint32_t)indexCount;
-
-	fast_obj_destroy(obj);
-	return;
-}
 
 void renderer_AddShaders(AppState* appState)
 {
@@ -1267,4 +1223,158 @@ static inline void loadMat4(const ::mat4& matrix, float* output)
 	output[13] = matrix.getCol(3).getY();
 	output[14] = matrix.getCol(3).getZ();
 	output[15] = matrix.getCol(3).getW();
+}
+
+int32_t mikkt_GetNumFaces(const SMikkTSpaceContext* context);
+int32_t mikkt_GetNumVerticesOfFace(const SMikkTSpaceContext* context, int32_t faceIndex);
+uint32_t mikkt_GetVertexIndex(const SMikkTSpaceContext* context, int32_t faceIndex, int32_t vertIndex);
+void mikkt_GetPosition(const SMikkTSpaceContext* context, float position[3], int32_t faceIndex, int32_t vertIndex);
+void mikkt_GetNormal(const SMikkTSpaceContext* context, float normal[3], int32_t faceIndex, int32_t vertIndex);
+void mikkt_GetTexcoord(const SMikkTSpaceContext* context, float normal[2], int32_t faceIndex, int32_t vertIndex);
+void mikkt_SetTSpaceBasic(const SMikkTSpaceContext* context, const float tangent[3], float sign, int32_t faceIndex, int32_t vertIndex);
+
+// TODO(gmodarelli): Use scratch vertex and index buffers and generate proper
+// indices with mesh_optimizer
+void renderer_LoadGeometry(RendererGeometry* geometry, const char* path)
+{
+	fastObjMesh* obj = fast_obj_read(path);
+	if (!obj)
+	{
+		return;
+	}
+
+	size_t indexCount = 0;
+	for (uint32_t i = 0; i < obj->face_count; ++i)
+	{
+		indexCount += 3 * (obj->face_vertices[i] - 2);
+	}
+
+	size_t vertexOffset = 0;
+	size_t indexOffset = 0;
+
+	for (uint32_t i = 0; i < obj->face_count; ++i)
+	{
+		assert(obj->face_vertices[i] == 3);
+
+		for (uint32_t j = 0; j < obj->face_vertices[i]; ++j)
+		{
+			fastObjIndex gi = obj->indices[indexOffset + j];
+
+			MeshVertex* v = &geometry->vertices[geometry->numVertices + vertexOffset++];
+			v->position.x = obj->positions[gi.p * 3 + 0];
+			v->position.y = obj->positions[gi.p * 3 + 1];
+			v->position.z = obj->positions[gi.p * 3 + 2];
+			v->color.x = obj->colors[gi.p * 3 + 0];
+			v->color.y = obj->colors[gi.p * 3 + 1];
+			v->color.z = obj->colors[gi.p * 3 + 2];
+			v->normal.x = obj->normals[gi.n * 3 + 0];
+			v->normal.y = obj->normals[gi.n * 3 + 1];
+			v->normal.z = obj->normals[gi.n * 3 + 2];
+			v->uv.x = obj->texcoords[gi.t * 2 + 0];
+			v->uv.y = 1.0f - obj->texcoords[gi.t * 2 + 1];
+			v->tangent.x = 0;
+			v->tangent.z = 0;
+			v->tangent.y = 0;
+			v->tangent.w = 0;
+		}
+
+		indexOffset += obj->face_vertices[i];
+	}
+
+	assert(vertexOffset == indexCount);
+	geometry->numVertices += (uint32_t)indexCount;
+
+	for (uint32_t i = 0; i < indexCount; ++i) {
+		geometry->indices[geometry->numIndices + i] = (uint32_t)i;
+	}
+	geometry->numIndices += (uint32_t)indexCount;
+
+	// Calculate MikkTSpace tangents
+	::SMikkTSpaceInterface mikktInterface = {};
+	mikktInterface.m_getNumFaces = mikkt_GetNumFaces;
+	mikktInterface.m_getNumVerticesOfFace = mikkt_GetNumVerticesOfFace;
+	mikktInterface.m_getPosition = mikkt_GetPosition;
+	mikktInterface.m_getNormal = mikkt_GetNormal;
+	mikktInterface.m_getTexCoord = mikkt_GetTexcoord;
+	mikktInterface.m_setTSpaceBasic = mikkt_SetTSpaceBasic;
+
+	::SMikkTSpaceContext mikktContext = {};
+	mikktContext.m_pInterface = &mikktInterface;
+	mikktContext.m_pUserData = (void*)geometry;
+
+	::genTangSpaceDefault(&mikktContext);
+
+	fast_obj_destroy(obj);
+	return;
+}
+
+int32_t mikkt_GetNumFaces(const SMikkTSpaceContext* context)
+{
+	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
+	return (int32_t)geometry->numIndices / 3;
+}
+
+int32_t mikkt_GetNumVerticesOfFace(const SMikkTSpaceContext* context, int32_t faceIndex)
+{
+	(void)context;
+	(void)faceIndex;
+
+	return 3;
+}
+
+uint32_t mikkt_GetVertexIndex(const SMikkTSpaceContext* context, int32_t faceIndex, int32_t vertIndex)
+{
+	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
+
+	uint32_t index = faceIndex * 3 + vertIndex;
+	assert(index < geometry->numIndices);
+
+	uint32_t vertexIndex = geometry->indices[index];
+	assert(vertexIndex < geometry->numVertices);
+
+	return vertexIndex;
+}
+
+void mikkt_GetPosition(const SMikkTSpaceContext* context, float position[3], int32_t faceIndex, int32_t vertIndex)
+{
+	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
+
+	uint32_t vertexIndex = mikkt_GetVertexIndex(context, faceIndex, vertIndex);
+	const MeshVertex& vertex = geometry->vertices[vertexIndex];
+	position[0] = vertex.position.x;
+	position[1] = vertex.position.y;
+	position[2] = vertex.position.z;
+}
+
+void mikkt_GetNormal(const SMikkTSpaceContext* context, float normal[3], int32_t faceIndex, int32_t vertIndex)
+{
+	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
+
+	uint32_t vertexIndex = mikkt_GetVertexIndex(context, faceIndex, vertIndex);
+	const MeshVertex& vertex = geometry->vertices[vertexIndex];
+	normal[0] = vertex.normal.x;
+	normal[1] = vertex.normal.y;
+	normal[2] = vertex.normal.z;
+}
+
+void mikkt_GetTexcoord(const SMikkTSpaceContext* context, float texcoord[2], int32_t faceIndex, int32_t vertIndex)
+{
+	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
+
+	uint32_t vertexIndex = mikkt_GetVertexIndex(context, faceIndex, vertIndex);
+	const MeshVertex& vertex = geometry->vertices[vertexIndex];
+	texcoord[0] = vertex.uv.x;
+	texcoord[1] = vertex.uv.y;
+}
+
+void mikkt_SetTSpaceBasic(const SMikkTSpaceContext* context, const float tangent[3], float sign, int32_t faceIndex, int32_t vertIndex)
+{
+	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
+
+	uint32_t vertexIndex = mikkt_GetVertexIndex(context, faceIndex, vertIndex);
+	MeshVertex& vertex = geometry->vertices[vertexIndex];
+	vertex.tangent.x = tangent[0];
+	vertex.tangent.y = tangent[1];
+	vertex.tangent.z = tangent[2];
+	vertex.tangent.w = sign;
 }

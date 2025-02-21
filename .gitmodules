@@ -7,3 +7,6 @@
 [submodule "3rdparty/fast_obj"]
 	path = 3rdparty/fast_obj
 	url = git@github.com:thisistherk/fast_obj.git
+[submodule "3rdparty/MikkTSpace"]
+	path = 3rdparty/MikkTSpace
+	url = git@github.com:PixelJuiceGames/MikkTSpace.git

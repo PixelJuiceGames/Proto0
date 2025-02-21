@@ -15,6 +15,8 @@ Varyings main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     varyings.PositionWS = mul(instance.worldMat, float4(vertex.position, 1.0)).xyz;
     varyings.PositionCS = mul(g_Frame.projViewMat, float4(varyings.PositionWS, 1.0));
     varyings.NormalWS = normalize(mul((float3x3) instance.worldMat, vertex.normal));
+    varyings.TangentWS.xyz = normalize(mul((float3x3) instance.worldMat, vertex.tangent.xyz));
+    varyings.TangentWS.w = -vertex.tangent.w;
     varyings.instanceID = instanceID;
 
     return varyings;

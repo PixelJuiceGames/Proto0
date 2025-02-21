@@ -46,12 +46,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)\$(Platform)\$(Configuration)\Intermediate\$(ProjectName)\</IntDir>
-    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(SolutionDir)..\3rdParty\fast_obj;$(SolutionDir)..\Shaders;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(SolutionDir)..\3rdParty\fast_obj;$(SolutionDir)..\3rdParty\MikkTSpace;$(SolutionDir)..\Shaders;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)\$(Platform)\$(Configuration)\Intermediate\$(ProjectName)\</IntDir>
-    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(SolutionDir)..\3rdParty\fast_obj;$(SolutionDir)..\Shaders;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..\3rdparty\SDL\include;$(SolutionDir)..\3rdParty\The-Forge\Common_3;$(SolutionDir)..\3rdParty\fast_obj;$(SolutionDir)..\3rdParty\MikkTSpace;$(SolutionDir)..\Shaders;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -115,6 +115,7 @@ xcopy "$(SolutionDir)..\3rdParty\The-Forge\Common_3\OS\Windows\pc_gpu.data" "$(O
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\3rdparty\MikkTSpace\mikktspace.c" />
     <ClCompile Include="..\Code\main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -149,6 +150,10 @@ xcopy "$(SolutionDir)..\3rdParty\The-Forge\Common_3\OS\Windows\pc_gpu.data" "$(O
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Shaders\Common.hlsli">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\Shaders\PBR.hlsli">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>

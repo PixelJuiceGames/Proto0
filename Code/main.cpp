@@ -285,7 +285,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	as->orbitCamera.updateViewMatrix();
 
 	as->sunDirection = { 1.0f, 0.0f, -1.0f };
-	as->sunColor = { 1.0f, 1.0f, 1.0f };
+	as->sunColor = ::srgbToLinearf3({ 1.0f, 1.0f, 1.0f });
 	as->sunIntensity = 0.0f;
 
 	as->window = SDL_CreateWindow("Prototype 0", 1920, 1080, SDL_WINDOW_RESIZABLE);
@@ -650,21 +650,21 @@ bool renderer_Initialize(AppState* appState)
 			GPULight& keyLight = appState->lights[0];
 			keyLight.position = { 4.0f, -4.0f, 0.5f };
 			keyLight.range = 15.0f;
-			keyLight.color = { 1.0f, 0.2f, 0.2f };
+			keyLight.color = ::srgbToLinearf3({ 1.0f, 0.2f, 0.2f });
 			keyLight.intensity = 10.0f;
 
 			// Fill light
 			GPULight& fillLight = appState->lights[1];
 			fillLight.position = { -4.0f, -3.0f, 0.5f };
 			fillLight.range = 15.0f;
-			fillLight.color = { 0.2f, 0.2f, 1.0f };
+			fillLight.color = ::srgbToLinearf3({ 0.2f, 0.2f, 1.0f });
 			fillLight.intensity = 5.0f;
 
 			// Back light
 			GPULight& backLight = appState->lights[2];
 			backLight.position = { -4.0f, 3.0f, 1.5f };
 			backLight.range = 15.0f;
-			backLight.color = { 1.0f, 1.0, 1.0f };
+			backLight.color = ::srgbToLinearf3({ 1.0f, 1.0, 1.0f });
 			backLight.intensity = 15.0f;
 			
 			::BufferLoadDesc desc = {};

@@ -29,49 +29,92 @@
     "DescriptorTable("                  \
     "SAMPLER(s0, numDescriptors = unbounded, space = " #space ", offset = 0)),"
 
-#define DefaultRootSignature                                                                                                         \
-    "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED),"                                                                                  \
-        DESCRIPTOR_TABLE(3) DESCRIPTOR_TABLE(2) DESCRIPTOR_TABLE(1) DESCRIPTOR_TABLE(0)                                              \
-        SAMPLER_DESCRIPTOR_TABLE(                                                                                                    \
-            0) "StaticSampler(s0, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                                  \
-               "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"              \
-               "StaticSampler(s1, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                                  \
-               "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"                 \
-               "StaticSampler(s2, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_LINEAR_MIP_POINT,"                                                                           \
-               "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"              \
-               "StaticSampler(s3, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_LINEAR_MIP_POINT,"                                                                           \
-               "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"                 \
-               "StaticSampler(s4, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                                 \
-               "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"              \
-               "StaticSampler(s5, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                                 \
-               "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"                 \
-               "StaticSampler(s6, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                                  \
-               "addressU = TEXTURE_ADDRESS_MIRROR, addressV = TEXTURE_ADDRESS_MIRROR, addressW = TEXTURE_ADDRESS_MIRROR),"           \
-               "StaticSampler(s7, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_POINT, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"                             \
-               "addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, addressW = TEXTURE_ADDRESS_BORDER),"           \
-               "StaticSampler(s8, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                                 \
-               "addressU = TEXTURE_ADDRESS_MIRROR, addressV = TEXTURE_ADDRESS_MIRROR, addressW = TEXTURE_ADDRESS_MIRROR),"           \
-               "StaticSampler(s9, space = 100,"                                                                                      \
-               "filter = FILTER_MIN_MAG_MIP_LINEAR, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"                            \
-               "addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, addressW = TEXTURE_ADDRESS_BORDER),"           \
-               "StaticSampler(s10, space = 100,"                                                                                     \
-               "filter = FILTER_ANISOTROPIC, maxAnisotropy = 8,"                                                                     \
-               "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP)"
+#define DefaultRootSignature                                                                                    \
+    "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED),"                                                             \
+    DESCRIPTOR_TABLE(3)                                                                                         \
+    DESCRIPTOR_TABLE(2)                                                                                         \
+    DESCRIPTOR_TABLE(1)                                                                                         \
+    DESCRIPTOR_TABLE(0)                                                                                         \
+    SAMPLER_DESCRIPTOR_TABLE(0)                                                                                 \
+    "StaticSampler(s0, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                        \
+    "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"    \
+    "StaticSampler(s1, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                        \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"       \
+    "StaticSampler(s2, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_LINEAR_MIP_POINT,"                                                                 \
+    "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"    \
+    "StaticSampler(s3, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_LINEAR_MIP_POINT,"                                                                 \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"       \
+    "StaticSampler(s4, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                       \
+    "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"    \
+    "StaticSampler(s5, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                       \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"       \
+    "StaticSampler(s6, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                        \
+    "addressU = TEXTURE_ADDRESS_MIRROR, addressV = TEXTURE_ADDRESS_MIRROR, addressW = TEXTURE_ADDRESS_MIRROR)," \
+    "StaticSampler(s7, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"                   \
+    "addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, addressW = TEXTURE_ADDRESS_BORDER)," \
+    "StaticSampler(s8, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                       \
+    "addressU = TEXTURE_ADDRESS_MIRROR, addressV = TEXTURE_ADDRESS_MIRROR, addressW = TEXTURE_ADDRESS_MIRROR)," \
+    "StaticSampler(s9, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"                  \
+    "addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, addressW = TEXTURE_ADDRESS_BORDER)," \
+    "StaticSampler(s10, space = 100,"                                                                           \
+    "filter = FILTER_ANISOTROPIC, maxAnisotropy = 8,"                                                           \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP)"
+
+#define ComputeRootSignature                                                                                    \
+    DESCRIPTOR_TABLE(3)                                                                                         \
+    DESCRIPTOR_TABLE(2)                                                                                         \
+    DESCRIPTOR_TABLE(1)                                                                                         \
+    DESCRIPTOR_TABLE(0)                                                                                         \
+    SAMPLER_DESCRIPTOR_TABLE(0)                                                                                 \
+    "StaticSampler(s0, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                        \
+    "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"    \
+    "StaticSampler(s1, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                        \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"       \
+    "StaticSampler(s2, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_LINEAR_MIP_POINT,"                                                                 \
+    "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"    \
+    "StaticSampler(s3, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_LINEAR_MIP_POINT,"                                                                 \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"       \
+    "StaticSampler(s4, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                       \
+    "addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP),"    \
+    "StaticSampler(s5, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                       \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP),"       \
+    "StaticSampler(s6, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT,"                                                                        \
+    "addressU = TEXTURE_ADDRESS_MIRROR, addressV = TEXTURE_ADDRESS_MIRROR, addressW = TEXTURE_ADDRESS_MIRROR)," \
+    "StaticSampler(s7, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_POINT, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"                   \
+    "addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, addressW = TEXTURE_ADDRESS_BORDER)," \
+    "StaticSampler(s8, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR,"                                                                       \
+    "addressU = TEXTURE_ADDRESS_MIRROR, addressV = TEXTURE_ADDRESS_MIRROR, addressW = TEXTURE_ADDRESS_MIRROR)," \
+    "StaticSampler(s9, space = 100,"                                                                            \
+    "filter = FILTER_MIN_MAG_MIP_LINEAR, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"                  \
+    "addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, addressW = TEXTURE_ADDRESS_BORDER)," \
+    "StaticSampler(s10, space = 100,"                                                                           \
+    "filter = FILTER_ANISOTROPIC, maxAnisotropy = 8,"                                                           \
+    "addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP)"
 
 #endif
 
 #if defined(__cplusplus)
+// TODO(gmodarelli): Remove this and use vectormath::mat4 instead?
 typedef struct { float m[16]; } float4x4;
-typedef uint32_t uint;
 #endif
 
 #define INVALID_BINDLESS_INDEX (uint)-1
@@ -129,6 +172,11 @@ struct Frame
     uint materialBufferIndex;
     uint lightBufferIndex;
     uint numLights;
+};
+
+struct DownsampleUniform
+{
+    uint2 inputSize;
 };
 
 #if !defined(__cplusplus)

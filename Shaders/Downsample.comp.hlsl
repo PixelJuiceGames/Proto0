@@ -57,7 +57,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
     if (DTid.x < width && DTid.y < height)
     {   
         float2 inPixelSize = (1.0f / float2(g_DownsampleUniform.inputSize)) * 0.5f;
-        float2 uv = float2(DTid.xy) / float2(width, height);
+        float2 uv = float2(DTid.xy + 0.5f) / float2(width, height);
         float3 downsampledColor = Downsample(uv, inPixelSize);
     
         gDestinationTexture[DTid.xy] = float4(downsampledColor, 1.0f);

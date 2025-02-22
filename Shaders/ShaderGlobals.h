@@ -179,6 +179,12 @@ struct DownsampleUniform
     uint2 inputSize;
 };
 
+struct UpsampleUniform
+{
+    uint2 inputSize;
+    float radius;
+};
+
 #if !defined(__cplusplus)
 bool HasValidTexture(uint textureBindlessIndex)
 {

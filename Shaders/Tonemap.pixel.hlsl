@@ -3,6 +3,7 @@
 
 Texture2D<float4> gSceneColor : register(t0, SPACE_PerFrame);
 Texture3D<float3> gTonyMcMapfaceLut : register(t1, SPACE_PerFrame);
+Texture2D<float4> gBloomBuffer : register(t2, SPACE_PerFrame);
 SamplerState gLinearClampSampler : register(s0, SPACE_Persistent);
 
 // https://github.com/h3r2tic/tony-mc-mapface
@@ -25,6 +26,7 @@ float3 tony_mc_mapface(float3 stimulus)
 float4 main(FullscreenVaryings varyings) : SV_TARGET
 {
     float3 hdrColor = gSceneColor.Sample(gLinearClampSampler, varyings.UV).rgb;
-    float3 sdrColor = tony_mc_mapface(hdrColor);
+    float3 bloom = gBloomBuffer.Sample(gLinearClampSampler, varyings.UV).rgb;
+    float3 sdrColor = tony_mc_mapface(hdrColor + bloom);
     return float4(sdrColor, 1.0f);
 }

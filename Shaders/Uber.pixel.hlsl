@@ -57,15 +57,36 @@ float4 main(Varyings varyings) : SV_Target0
         emission += emissiveSample.rgb;
     }
     
-    float3 L = -normalize(g_Frame.sunDirection.xyz);
     float3 V = normalize(g_Frame.cameraPosition.xyz - varyings.PositionWS);
     float3 Lo = 0.0f;
     
     // Sun light
-    float NdotL = max(0.00001f, dot(N, L));
-    float3 radiance = g_Frame.sunColor.rgb * g_Frame.sunColor.a;
-    const float3 brdf = FilamentBRDF(N, V, L, albedo.rgb, roughness, metalness, material.reflectance);
-    Lo += brdf * radiance * NdotL * occlusion;
+    {
+        float3 L = -normalize(g_Frame.sunDirection.xyz);
+        float NdotL = max(0.00001f, dot(N, L));
+        float3 radiance = g_Frame.sunColor.rgb * g_Frame.sunColor.a;
+        const float3 brdf = FilamentBRDF(N, V, L, albedo.rgb, roughness, metalness, material.reflectance);
+        Lo += brdf * radiance * NdotL * occlusion;
+    }
+    
+    // Point lights
+    {
+        ByteAddressBuffer lightBuffer = ResourceDescriptorHeap[g_Frame.lightBufferIndex];
+        
+        for (uint i = 0; i < g_Frame.numLights; i++)
+        {
+            GPULight light = lightBuffer.Load<GPULight>(i * sizeof(GPULight));
+            float3 L = normalize(light.position - varyings.PositionWS);
+            float NdotL = max(0.00001f, dot(N, L));
+            float distance = length(light.position - varyings.PositionWS);
+            float distanceRadius = 1.0f - pow(distance / light.range, 4);
+            float clamped = pow(saturate(distanceRadius), 2);
+            float attenuation = clamped / (distance * distance + 1.0f);
+            float3 radiance = light.color * light.intensity * attenuation;
+            const float3 brdf = FilamentBRDF(N, V, L, albedo.rgb, roughness, metalness, material.reflectance);
+            Lo += brdf * radiance * NdotL * occlusion;
+        }
+    }
     
     // Emissions
     Lo += (emission * material.emissiveFactor);

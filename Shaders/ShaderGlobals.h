@@ -110,6 +110,14 @@ struct GPUInstance
     uint _pad2;
 };
 
+struct GPULight
+{
+    float3 position;
+    float range;
+    float3 color;
+    float intensity;
+};
+
 struct Frame
 {
 	float4x4 projViewMat;
@@ -119,6 +127,8 @@ struct Frame
     uint vertexBufferIndex;
     uint instanceBufferIndex;
     uint materialBufferIndex;
+    uint lightBufferIndex;
+    uint numLights;
 };
 
 #if !defined(__cplusplus)

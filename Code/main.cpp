@@ -204,12 +204,16 @@ struct AppState
 	::Buffer* frameUniformBuffers[gDataBufferCount] = { NULL };
 	::Buffer* instanceBuffers[gDataBufferCount] = { NULL };
 	::Buffer* materialBuffers[gDataBufferCount] = { NULL };
+	::Buffer* lightBuffers[gDataBufferCount] = { NULL };
 
 	GPUInstance* instances = NULL;
 	uint32_t numInstances = 0;
 
 	GPUMaterial* materials = NULL;
 	uint32_t numMaterials = 0;
+
+	GPULight* lights = NULL;
+	uint32_t numLights = 0;
 
 	// UberShader
 	::Shader* uberShader = NULL;
@@ -282,7 +286,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 
 	as->sunDirection = { 1.0f, 0.0f, -1.0f };
 	as->sunColor = { 1.0f, 1.0f, 1.0f };
-	as->sunIntensity = 1.0f;
+	as->sunIntensity = 0.0f;
 
 	as->window = SDL_CreateWindow("Prototype 0", 1920, 1080, SDL_WINDOW_RESIZABLE);
 	if (!as->window)
@@ -538,7 +542,7 @@ bool renderer_Initialize(AppState* appState)
 		}
 	}
 
-	// Temporary instances and materials
+	// Temporary instances, materials and lights
 	{
 		// Materials
 		{
@@ -634,6 +638,50 @@ bool renderer_Initialize(AppState* appState)
 				::addResource(&desc, NULL);
 			}
 		}
+
+		// Lights
+		{
+			appState->numLights = 3;
+			appState->lights = (GPULight*)SDL_malloc(sizeof(GPULight) * appState->numLights);
+			assert(appState->lights);
+			memset(appState->lights, 0, sizeof(GPULight)* appState->numLights);
+
+			// Key light
+			GPULight& keyLight = appState->lights[0];
+			keyLight.position = { 4.0f, -4.0f, 0.5f };
+			keyLight.range = 15.0f;
+			keyLight.color = { 1.0f, 0.2f, 0.2f };
+			keyLight.intensity = 10.0f;
+
+			// Fill light
+			GPULight& fillLight = appState->lights[1];
+			fillLight.position = { -4.0f, -3.0f, 0.5f };
+			fillLight.range = 15.0f;
+			fillLight.color = { 0.2f, 0.2f, 1.0f };
+			fillLight.intensity = 5.0f;
+
+			// Back light
+			GPULight& backLight = appState->lights[2];
+			backLight.position = { -4.0f, 3.0f, 1.5f };
+			backLight.range = 15.0f;
+			backLight.color = { 1.0f, 1.0, 1.0f };
+			backLight.intensity = 15.0f;
+			
+			::BufferLoadDesc desc = {};
+			desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
+			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
+			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
+			desc.mDesc.mSize = sizeof(GPUInstance) * appState->numLights;
+			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
+			desc.mDesc.bBindless = true;
+			desc.pData = appState->lights;
+			desc.mDesc.pName = "Lights Buffer";
+			for (uint32_t i = 0; i < gDataBufferCount; ++i)
+			{
+				desc.ppBuffer = &appState->lightBuffers[i];
+				::addResource(&desc, NULL);
+			}
+		}
 	}
 
 	if (!renderer_OnLoad(appState, { ::RELOAD_TYPE_ALL }))
@@ -716,6 +764,7 @@ void renderer_Exit(AppState* appState)
 		::removeResource(appState->frameUniformBuffers[i]);
 		::removeResource(appState->materialBuffers[i]);
 		::removeResource(appState->instanceBuffers[i]);
+		::removeResource(appState->lightBuffers[i]);
 	}
 
 	::exitGpuCmdRing(appState->renderer, &appState->graphicsCmdRing);
@@ -940,6 +989,8 @@ void renderer_Draw(AppState* appState)
 			frameData.vertexBufferIndex = (uint32_t)appState->vertexBuffer->mDx.mDescriptors;
 			frameData.materialBufferIndex = (uint32_t)appState->materialBuffers[appState->frameIndex]->mDx.mDescriptors;
 			frameData.instanceBufferIndex = (uint32_t)appState->instanceBuffers[appState->frameIndex]->mDx.mDescriptors;
+			frameData.lightBufferIndex = (uint32_t)appState->lightBuffers[appState->frameIndex]->mDx.mDescriptors;
+			frameData.numLights = appState->numLights;
 
 			::BufferUpdateDesc desc = { appState->frameUniformBuffers[appState->frameIndex] };
 			::beginUpdateResource(&desc);

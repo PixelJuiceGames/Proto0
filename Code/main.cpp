@@ -157,6 +157,13 @@ struct SRT_ToneMappingData
 #endif
 			::DESCRIPTOR_TYPE_TEXTURE, 1, 0
 		};
+		const ::Descriptor gTonyMcMapfaceLut =
+		{
+#if defined IF_VALIDATE_DESCRIPTOR
+			"gTonyMcMapfaceLut", ROOT_PARAM_PerFrame,
+#endif
+			::DESCRIPTOR_TYPE_TEXTURE, 1, 1
+		};
 	}*pPerFrame;
 
 	static const ::Descriptor* PerFramePtr()
@@ -222,6 +229,7 @@ struct AppState
 	// Tonemapping
 	::Shader* toneMapping = NULL;
 	::Pipeline* toneMappingPipeline = NULL;
+	::Texture* tonyMcMapfaceLUT = NULL;
 	::DescriptorSet* toneMappingPersistentDescriptorSet = NULL;
 	::DescriptorSet* toneMappingPerFrameDescriptorSet = NULL;
 
@@ -542,6 +550,25 @@ bool renderer_Initialize(AppState* appState)
 		}
 	}
 
+	// Load Tony McMapface LUT
+	{
+		::SyncToken texturesToken = NULL;
+
+		::TextureLoadDesc textureLoadDesc = {};
+		memset(&textureLoadDesc, 0, sizeof(::TextureLoadDesc));
+
+		::TextureDesc textureDesc = {};
+		memset(&textureDesc, 0, sizeof(::TextureDesc));
+		textureDesc.bBindless = false;
+		textureLoadDesc.pDesc = &textureDesc;
+
+		textureLoadDesc.pFileName = "Textures/tony_mc_mapface.dds";
+		textureLoadDesc.ppTexture = &appState->tonyMcMapfaceLUT;
+		::addResource(&textureLoadDesc, &texturesToken);
+
+		::waitForToken(&texturesToken);
+	}
+
 	// Temporary instances, materials and lights
 	{
 		// Materials
@@ -753,6 +780,7 @@ void renderer_Exit(AppState* appState)
 	::removeResource(appState->normalTexture);
 	::removeResource(appState->ormTexture);
 	::removeResource(appState->emissiveTexture);
+	::removeResource(appState->tonyMcMapfaceLUT);
 
 	::removeSampler(appState->renderer, appState->linearRepeatSampler);
 	::removeSampler(appState->renderer, appState->linearClampSampler);
@@ -1142,7 +1170,7 @@ void renderer_AddDescriptorSets(AppState* appState)
 		desc.mIndex = ROOT_PARAM_PerFrame;
 		desc.mMaxSets = gDataBufferCount;
 		desc.mNodeIndex = 0;
-		desc.mDescriptorCount = 1;
+		desc.mDescriptorCount = 2;
 		desc.pDescriptors = SRT_ToneMappingData::PerFramePtr();
 		::addDescriptorSet(appState->renderer, &desc, &appState->toneMappingPerFrameDescriptorSet);
 	}
@@ -1176,10 +1204,12 @@ void renderer_PrepareDescriptorSets(AppState* appState)
 
 	for (uint32_t i = 0; i < gDataBufferCount; ++i)
 	{
-		DescriptorData uParams[1] = {};
+		DescriptorData uParams[2] = {};
 		uParams[0].mIndex = (offsetof(SRT_ToneMappingData::PerFrame, gSceneColor)) / sizeof(::Descriptor);
 		uParams[0].ppTextures = &appState->sceneColor->pTexture;
-		updateDescriptorSet(appState->renderer, i, appState->toneMappingPerFrameDescriptorSet, 1, uParams);
+		uParams[1].mIndex = (offsetof(SRT_ToneMappingData::PerFrame, gTonyMcMapfaceLut)) / sizeof(::Descriptor);
+		uParams[1].ppTextures = &appState->tonyMcMapfaceLUT;
+		updateDescriptorSet(appState->renderer, i, appState->toneMappingPerFrameDescriptorSet, 2, uParams);
 	}
 }
 

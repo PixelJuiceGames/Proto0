@@ -1,3 +1,5 @@
+// Based on Froyok Lena Piquet bloom article
+// https://www.froyok.fr/blog/2021-12-ue4-custom-bloom/
 #include "ShaderGlobals.h"
 
 Texture2D<float4> gSourceTexture : register(t1, SPACE_PerDraw);

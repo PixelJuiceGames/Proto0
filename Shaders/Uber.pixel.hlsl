@@ -8,7 +8,7 @@ float4 main(Varyings varyings) : SV_Target0
     GPUInstance instance = instanceBuffer.Load<GPUInstance>(varyings.instanceID * sizeof(GPUInstance));
     
     ByteAddressBuffer materialBuffer = ResourceDescriptorHeap[g_Frame.materialBufferIndex];
-    GPUMaterial material = materialBuffer.Load<GPUMaterial>(instance.materialBufferOffset);
+    GPUMaterial material = materialBuffer.Load<GPUMaterial>(instance.materialBufferIndex * sizeof(GPUMaterial));
     
     float2 uv0 = varyings.Texcoord0 * material.uv0Tiling;
     

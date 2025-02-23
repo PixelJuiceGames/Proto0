@@ -362,7 +362,7 @@ const uint32_t kUpsampleSteps = 7;
 
 const uint32_t k_MaxMaterials = 1024;
 const uint32_t k_MaxMeshes = 1024;
-const uint32_t k_MaxInstances = 1024;
+const uint32_t k_MaxInstances = 1024 * 1024;
 const uint32_t k_MaxIndirectDrawIndexArgs = 1024;
 
 struct AppState
@@ -396,15 +396,12 @@ struct AppState
 	::Buffer* indirectDrawBuffers[kDataBufferCount] = { NULL };
 	
 	GPUMesh* meshes = NULL;
-	uint32_t maxMeshes = 1024;
 	uint32_t numMeshes = 0;
 
 	GPUInstance* instances = NULL;
-	uint32_t maxInstances = 1024;
 	uint32_t numInstances = 0;
 
 	GPUMaterial* materials = NULL;
-	uint32_t maxMaterials = 1024;
 	uint32_t numMaterials = 0;
 
 	IndirectDrawIndexArguments* indirectDrawIndexArgs[kDataBufferCount] = { NULL };
@@ -497,7 +494,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	memset(as, 0, sizeof(AppState));
 
 	*appstate = as;
-	as->orbitCamera.position = { 0.0f, -3.5f, 1.0f };
+	as->orbitCamera.position = { 0.0f, -10.0f, 10.0f };
 	as->orbitCamera.lookAt = { 0.0f, 0.0f, 0.0f };
 	as->orbitCamera.updateViewMatrix();
 
@@ -858,10 +855,9 @@ bool renderer_Initialize(AppState* appState)
 				::waitForToken(&texturesToken);
 			}
 
-			appState->maxMaterials = k_MaxMaterials;
-			appState->materials = (GPUMaterial*)SDL_malloc(sizeof(GPUMaterial) * appState->maxMaterials);
+			appState->materials = (GPUMaterial*)SDL_malloc(sizeof(GPUMaterial) * k_MaxMaterials);
 			assert(appState->materials);
-			memset(appState->materials, 0, sizeof(GPUMaterial) * appState->maxMaterials);
+			memset(appState->materials, 0, sizeof(GPUMaterial) * k_MaxMaterials);
 
 			GPUMaterial& gridMaterial = appState->materials[appState->numMaterials++];
 			gridMaterial.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -871,7 +867,7 @@ bool renderer_Initialize(AppState* appState)
 			gridMaterial.metalnessFactor = 0.0f;
 			gridMaterial.emissiveFactor = 0.0f;
 			gridMaterial.reflectance = 0.5f;
-			gridMaterial.uv0Tiling = { 50.0f, 50.0f };
+			gridMaterial.uv0Tiling = { 1.0f, 1.0f };
 			gridMaterial.albedoTextureIndex = appState->gridAlbedoTexture->mDx.mDescriptors;
 			gridMaterial.normalTextureIndex = INVALID_BINDLESS_INDEX;
 			gridMaterial.ormTextureIndex = appState->gridOrmTexture->mDx.mDescriptors;
@@ -895,7 +891,7 @@ bool renderer_Initialize(AppState* appState)
 			desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
 			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-			desc.mDesc.mSize = sizeof(GPUMaterial) * appState->maxMaterials;
+			desc.mDesc.mSize = sizeof(GPUMaterial) * k_MaxMaterials;
 			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
 			desc.mDesc.bBindless = true;
 			desc.pData = appState->materials;
@@ -909,11 +905,9 @@ bool renderer_Initialize(AppState* appState)
 
 		// Instances
 		{
-			appState->maxInstances = k_MaxInstances;
-			appState->instances = (GPUInstance*)SDL_malloc(sizeof(GPUInstance) * appState->maxInstances);
+			appState->instances = (GPUInstance*)SDL_malloc(sizeof(GPUInstance) * k_MaxInstances);
 			assert(appState->instances);
-			memset(appState->instances, 0, sizeof(GPUInstance) * appState->maxInstances);
-
+			memset(appState->instances, 0, sizeof(GPUInstance) * k_MaxInstances);
 
 			appState->maxIndirectDrawIndexArgs = k_MaxIndirectDrawIndexArgs;
 
@@ -925,18 +919,26 @@ bool renderer_Initialize(AppState* appState)
 				appState->numIndirectDrawIndexArgs[i] = 0;
 			}
 
-			// Plane Instance
+			// TODO: Do not generate these here, but in the gameplay code (once we have it)
+			// Plane Instances for the ground
 			{
 				uint32_t startInstance = appState->numInstances;
-				GPUInstance& instance = appState->instances[appState->numInstances++];
-				::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, -2.0f });
-				::mat4 scale = ::mat4::scale({ 50.0f, 50.0f, 10.0f });
-				loadMat4(translate * scale, &instance.worldMat.m[0]);
-				instance.meshIndex = (uint32_t)Meshes::Plane;
-				// TODO(gmodarelli): Use index instead of offset and do offset multiplication in shader?
-				instance.materialBufferOffset = 0 * sizeof(GPUMaterial);
+				uint32_t numInstances = 0;
+				uint32_t meshIndex = (uint32_t)Meshes::Plane;
+				for (int32_t y = -50; y < 50; y++)
+				{
+					for (int32_t x = -50; x < 50; x++)
+					{
+						GPUInstance& instance = appState->instances[appState->numInstances++];
+						::mat4 translate = ::mat4::translation({ x + 0.5f, y + 0.5f, 0.0f });
+						loadMat4(translate, &instance.worldMat.m[0]);
+						instance.meshIndex = meshIndex;
+						instance.materialBufferIndex = 0;
+						numInstances++;
+					}
+				}
 
-				const GPUMesh& mesh = appState->meshes[instance.meshIndex];
+				const GPUMesh& mesh = appState->meshes[meshIndex];
 
 				for (uint32_t i = 0; i < kDataBufferCount; ++i)
 				{
@@ -944,7 +946,7 @@ bool renderer_Initialize(AppState* appState)
 					drawIndexArgs->mIndexCount = mesh.indexCount;
 					drawIndexArgs->mStartIndex = mesh.indexOffset;
 					drawIndexArgs->mVertexOffset = mesh.vertexOffset;
-					drawIndexArgs->mInstanceCount = 1;
+					drawIndexArgs->mInstanceCount = numInstances;
 					drawIndexArgs->mStartInstance = startInstance;
 				}
 			}
@@ -953,11 +955,10 @@ bool renderer_Initialize(AppState* appState)
 			{
 				uint32_t startInstance = appState->numInstances;
 				GPUInstance& instance = appState->instances[appState->numInstances++];
-				::mat4 identity = ::mat4::identity();
-				loadMat4(identity, &instance.worldMat.m[0]);
+				::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, 0.75f });
+				loadMat4(translate, &instance.worldMat.m[0]);
 				instance.meshIndex = (uint32_t)Meshes::DamagedHelmet;
-				// TODO(gmodarelli): Use index instead of offset and do offset multiplication in shader?
-				instance.materialBufferOffset = 1 * sizeof(GPUMaterial);
+				instance.materialBufferIndex = 1;
 
 				const GPUMesh& mesh = appState->meshes[instance.meshIndex];
 
@@ -976,7 +977,7 @@ bool renderer_Initialize(AppState* appState)
 			desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
 			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-			desc.mDesc.mSize = sizeof(GPUInstance) * appState->maxInstances;
+			desc.mDesc.mSize = sizeof(GPUInstance) * k_MaxInstances;
 			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
 			desc.mDesc.bBindless = true;
 			desc.pData = appState->instances;
@@ -1017,21 +1018,21 @@ bool renderer_Initialize(AppState* appState)
 
 			// Key light
 			GPULight& keyLight = appState->lights[0];
-			keyLight.position = { 4.0f, -4.0f, 0.5f };
+			keyLight.position = { 4.0f, -4.0f, 5.5f };
 			keyLight.range = 15.0f;
 			keyLight.color = ::srgbToLinearf3({ 1.0f, 0.2f, 0.2f });
 			keyLight.intensity = 10.0f;
 
 			// Fill light
 			GPULight& fillLight = appState->lights[1];
-			fillLight.position = { -4.0f, -3.0f, 0.5f };
+			fillLight.position = { -4.0f, -3.0f, 5.5f };
 			fillLight.range = 15.0f;
 			fillLight.color = ::srgbToLinearf3({ 0.2f, 0.2f, 1.0f });
 			fillLight.intensity = 5.0f;
 
 			// Back light
 			GPULight& backLight = appState->lights[2];
-			backLight.position = { 0.0f, 3.0f, 3.0f };
+			backLight.position = { 0.0f, 3.0f, 8.0f };
 			backLight.range = 15.0f;
 			backLight.color = ::srgbToLinearf3({ 0.2f, 1.0, 0.2f });
 			backLight.intensity = 10.0f;
@@ -1417,12 +1418,6 @@ void renderer_Draw(AppState* appState)
 			::cmdBindIndexBuffer(cmd, appState->indexBuffer, ::INDEX_TYPE_UINT32, 0);
 
 			::cmdExecuteIndirect(cmd, ::INDIRECT_DRAW_INDEX, 2, appState->indirectDrawBuffers[appState->frameIndex], 0, NULL, 0);
-
-			//const GPUMesh* helmet = &appState->meshes[0];
-			//::cmdDrawIndexedInstanced(cmd, helmet->indexCount, helmet->indexOffset, 1, helmet->vertexOffset, 0);
-
-			//const GPUMesh* plane = &appState->meshes[1];
-			//::cmdDrawIndexedInstanced(cmd, plane->indexCount, plane->indexOffset, 1, plane->vertexOffset, 1);
 		}
 
 		::cmdBindRenderTargets(cmd, NULL);
@@ -1929,10 +1924,9 @@ void renderer_AddGeometry(AppState* appState)
 	assert(appState->geometry.indices);
 	memset(appState->geometry.indices, 0, sizeof(uint32_t) * maxIndices);
 
-	appState->maxMeshes = k_MaxMeshes;
-	appState->meshes = (GPUMesh*)tf_malloc(sizeof(GPUMesh) * appState->maxMeshes);
+	appState->meshes = (GPUMesh*)tf_malloc(sizeof(GPUMesh) * k_MaxMeshes);
 	assert(appState->meshes);
-	memset(appState->meshes, 0, sizeof(GPUMesh) * appState->maxMeshes);
+	memset(appState->meshes, 0, sizeof(GPUMesh) * k_MaxMeshes);
 	appState->numMeshes = 0;
 
 	GPUMesh* plane = &appState->meshes[(size_t)Meshes::Plane];
@@ -1954,7 +1948,7 @@ void renderer_AddGeometry(AppState* appState)
 		meshDesc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
 		meshDesc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 		meshDesc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-		meshDesc.mDesc.mSize = sizeof(GPUMesh) * appState->maxMeshes;
+		meshDesc.mDesc.mSize = sizeof(GPUMesh) * k_MaxMeshes;
 		meshDesc.mDesc.mElementCount = (uint32_t)(meshDesc.mDesc.mSize / sizeof(uint32_t));
 		meshDesc.mDesc.bBindless = true;
 		meshDesc.pData = appState->meshes;
@@ -2030,8 +2024,6 @@ struct MikkTUserData
 	RendererGeometry* geometry;
 };
 
-// TODO(gmodarelli): Use scratch vertex and index buffers and generate proper
-// indices with mesh_optimizer
 void renderer_LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 {
 	k_ScratchGeometryData.initialize();

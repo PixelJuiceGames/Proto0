@@ -156,7 +156,7 @@ struct GPUInstance
 {
     float4x4 worldMat;
     uint meshIndex;
-    uint materialBufferOffset;
+    uint materialBufferIndex;
     uint _pad0;
     uint _pad1;
 };

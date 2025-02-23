@@ -1,13 +1,15 @@
 #include "UberResources.hlsli"
 
 [RootSignature(DefaultRootSignature)]
-Varyings main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
+Varyings main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID, uint startVertexLocation : SV_StartVertexLocation, uint startInstanceLocation : SV_StartInstanceLocation)
 {
-    ByteAddressBuffer vertexBuffer = ResourceDescriptorHeap[g_Frame.vertexBufferIndex];
-    MeshVertex vertex = vertexBuffer.Load<MeshVertex>(vertexID * sizeof(MeshVertex));
-    
+    uint instanceIndex = instanceID + startInstanceLocation;
     ByteAddressBuffer instanceBuffer = ResourceDescriptorHeap[g_Frame.instanceBufferIndex];
-    GPUInstance instance = instanceBuffer.Load<GPUInstance>(instanceID * sizeof(GPUInstance));
+    GPUInstance instance = instanceBuffer.Load<GPUInstance>(instanceIndex * sizeof(GPUInstance));
+    
+    uint vertexIndex = vertexID + startVertexLocation;
+    ByteAddressBuffer vertexBuffer = ResourceDescriptorHeap[g_Frame.vertexBufferIndex];
+    MeshVertex vertex = vertexBuffer.Load<MeshVertex>(vertexIndex * sizeof(MeshVertex));
     
     Varyings varyings = (Varyings) 0;
     varyings.Color = vertex.color;
@@ -17,7 +19,7 @@ Varyings main(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     varyings.NormalWS = normalize(mul((float3x3) instance.worldMat, vertex.normal));
     varyings.TangentWS.xyz = normalize(mul((float3x3) instance.worldMat, vertex.tangent.xyz));
     varyings.TangentWS.w = -vertex.tangent.w;
-    varyings.instanceID = instanceID;
+    varyings.instanceID = instanceIndex;
 
     return varyings;
 }

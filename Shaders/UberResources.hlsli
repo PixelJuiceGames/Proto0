@@ -21,9 +21,4 @@ cbuffer CB0 : register(b0, SPACE_PerFrame)
     Frame g_Frame;
 };
 
-//cbuffer g_RootConstant : register(b1, UPDATE_FREQ_PER_DRAW)
-//{
-//
-//}
-
 #endif // _COMMON_HLSLI

@@ -128,6 +128,14 @@ struct MeshVertex
     float2 uv;
 };
 
+struct GPUMesh
+{
+    uint indexOffset;
+    uint indexCount;
+    uint vertexOffset;
+    uint _pad;
+};
+
 struct GPUMaterial
 {
     float4 baseColor;
@@ -137,20 +145,20 @@ struct GPUMaterial
     float metalnessFactor;
     float emissiveFactor;
     float reflectance;
+    float2 uv0Tiling;
     uint albedoTextureIndex;
     uint normalTextureIndex;
     uint ormTextureIndex;
     uint emissiveTextureIndex;
-    float2 _pad;
 };
 
 struct GPUInstance
 {
     float4x4 worldMat;
+    uint meshIndex;
     uint materialBufferOffset;
     uint _pad0;
     uint _pad1;
-    uint _pad2;
 };
 
 struct GPULight
@@ -167,6 +175,7 @@ struct Frame
     float4 cameraPosition;
     float4 sunDirection;
     float4 sunColor;
+    uint meshBufferIndex;
     uint vertexBufferIndex;
     uint instanceBufferIndex;
     uint materialBufferIndex;

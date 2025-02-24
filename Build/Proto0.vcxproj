@@ -117,6 +117,8 @@ xcopy "$(SolutionDir)..\3rdParty\The-Forge\Common_3\OS\Windows\pc_gpu.data" "$(O
   <ItemGroup>
     <ClCompile Include="..\3rdparty\MikkTSpace\mikktspace.c" />
     <ClCompile Include="..\Code\main.cpp" />
+    <ClCompile Include="..\Code\Renderer.cpp" />
+    <ClCompile Include="..\Code\Scene.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="..\Shaders\ComputeRootSignature.rs.hlsl">
@@ -195,6 +197,9 @@ xcopy "$(SolutionDir)..\3rdParty\The-Forge\Common_3\OS\Windows\pc_gpu.data" "$(O
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Code\DescriptorSets.autogen.h" />
+    <ClInclude Include="..\Code\Renderer.h" />
+    <ClInclude Include="..\Code\Scene.h" />
     <ClInclude Include="..\Shaders\ShaderGlobals.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

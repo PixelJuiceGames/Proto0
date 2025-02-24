@@ -365,6 +365,13 @@ const uint32_t k_MaxMeshes = 1024;
 const uint32_t k_MaxInstances = 1024 * 1024;
 const uint32_t k_MaxIndirectDrawIndexArgs = 1024;
 
+struct GameState
+{
+	::float3 playerPosition;
+	float playerMovementSpeed;
+	::float2 playerMovementVector;
+};
+
 struct AppState
 {
 	SDL_Window* window = NULL;
@@ -454,14 +461,17 @@ struct AppState
 
 	// Orbit camera data
 	OrbitCamera orbitCamera;
-	bool cameraDragging = false;
-	::float2 lastMousePosition;
 
 	// Sun
 	::float3 sunDirection;
 	::float3 sunColor;
 	float sunIntensity;
+
+	// Game State
+	GameState gameState;
 };
+
+void game_UpdatePlayerMovement(AppState* appState);
 
 bool renderer_Initialize(AppState* appState);
 void renderer_Exit(AppState* appState);
@@ -494,6 +504,11 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	memset(as, 0, sizeof(AppState));
 
 	*appstate = as;
+	
+	as->gameState.playerPosition = { 0.0f, 0.0f, 0.0f };
+	as->gameState.playerMovementVector = { 0.0f, 0.0f };
+	as->gameState.playerMovementSpeed = 2.0f;
+
 	as->orbitCamera.position = { 0.0f, -10.0f, 10.0f };
 	as->orbitCamera.lookAt = { 0.0f, 0.0f, 0.0f };
 	as->orbitCamera.updateViewMatrix();
@@ -526,24 +541,6 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     }
 
 	AppState* as = (AppState*)appstate;
-	if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
-	{
-		if (event->button.button == SDL_BUTTON_LEFT)
-		{
-			if (!as->cameraDragging)
-			{
-				as->cameraDragging = true;
-			}
-		}
-	}
-
-	if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
-	{
-		if (event->button.button == SDL_BUTTON_LEFT)
-		{
-			as->cameraDragging = false;
-		}
-	}
 
 	if (event->type == SDL_EVENT_WINDOW_RESIZED)
 	{
@@ -570,6 +567,47 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 			as->sunIntensity -= 0.1f;
 			as->sunIntensity = as->sunIntensity < 0.0f ? 0.0f : as->sunIntensity;
 		}
+
+		if (event->key.key == SDLK_A)
+		{
+			as->gameState.playerMovementVector.x = -1.0f;
+		}
+		if (event->key.key == SDLK_D)
+		{
+			as->gameState.playerMovementVector.x = 1.0f;
+		}
+		if (event->key.key == SDLK_W)
+		{
+			as->gameState.playerMovementVector.y = 1.0f;
+		}
+		if (event->key.key == SDLK_S)
+		{
+			as->gameState.playerMovementVector.y = -1.0f;
+		}
+	}
+
+	if (event->type == SDL_EVENT_KEY_UP)
+	{
+		if (event->key.key == SDLK_A)
+		{
+			if (as->gameState.playerMovementVector.x < 0)
+				as->gameState.playerMovementVector.x = 0.0f;
+		}
+		if (event->key.key == SDLK_D)
+		{
+			if (as->gameState.playerMovementVector.x > 0)
+				as->gameState.playerMovementVector.x = 0.0f;
+		}
+		if (event->key.key == SDLK_W)
+		{
+			if (as->gameState.playerMovementVector.y > 0)
+				as->gameState.playerMovementVector.y = 0.0f;
+		}
+		if (event->key.key == SDLK_S)
+		{
+			if (as->gameState.playerMovementVector.y < 0)
+				as->gameState.playerMovementVector.y = 0.0f;
+		}
 	}
 
     return SDL_APP_CONTINUE;
@@ -580,59 +618,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	AppState* as = (AppState*)appstate;
 	as->timer.Tick();
 
-	if (as->cameraDragging)
-	{
-
-#if 0
-		int32_t windowWidth;
-		int32_t windowHeight;
-		SDL_GetWindowSizeInPixels(as->window, &windowWidth, &windowHeight);
-
-		float xPos;
-		float yPos;
-		SDL_MouseButtonFlags mouseButtonFlags = SDL_GetMouseState(&xPos, &yPos);
-
-		float deltaAngleX = (2.0f * PI / (float)windowWidth);
-		float deltaAngleY = (PI / (float)windowHeight);
-
-		::float3 cameraViewDir = as->orbitCamera.getViewDir();
-		::Vector3 viewDir = { cameraViewDir.x, cameraViewDir.y, cameraViewDir.z };
-		::Vector3 upDir = { 0.0f, 0.0f, 1.0f };
-		float cosAngle = ::dot(viewDir, upDir);
-		if (cosAngle * ::sign(cosAngle) > 0.99f)
-		{
-			deltaAngleY = 0.0f;
-		}
-
-		float xAngle = (as->lastMousePosition.x - xPos) * deltaAngleX * 10.0f * as->timer.deltaTime;
-		float yAngle = (as->lastMousePosition.y - yPos) * deltaAngleY * 10.0f * as->timer.deltaTime;
-
-		::Vector4 cameraPosition = { as->orbitCamera.position.x, as->orbitCamera.position.y, as->orbitCamera.position.z, 1.0f };
-
-		::mat4 rotationX = ::mat4::rotationX(yAngle);
-		cameraPosition = rotationX * cameraPosition;
-
-		::mat4 rotationZ = ::mat4::rotationZ(xAngle);
-		cameraPosition = rotationZ * cameraPosition;
-#else
-		::Vector4 cameraPosition = { as->orbitCamera.position.x, as->orbitCamera.position.y, as->orbitCamera.position.z, 1.0f };
-
-		float rotationAngle = as->timer.deltaTime;
-		if (rotationAngle > 2.0f * PI) {
-			rotationAngle = 0.0f;
-		}
-		::mat4 rotationZ = ::mat4::rotationZ(rotationAngle);
-		cameraPosition = rotationZ * cameraPosition;
-#endif
-
-		as->orbitCamera.position = { cameraPosition.getX(), cameraPosition.getY(), cameraPosition.getZ() };
-		as->orbitCamera.updateViewMatrix();
-
-#if 0
-		as->lastMousePosition.x = xPos;
-		as->lastMousePosition.y = yPos;
-#endif
-	}
+	game_UpdatePlayerMovement(as);
 
 	renderer_Draw(as);
 
@@ -648,6 +634,29 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
 
 		SDL_free(as);
 	}
+}
+
+void game_UpdatePlayerMovement(AppState* appState)
+{
+	GameState* gameState = &appState->gameState;
+	if (gameState->playerMovementVector.x != 0 || gameState->playerMovementVector.y != 0)
+	{
+		gameState->playerMovementVector = ::normalize(gameState->playerMovementVector);
+	}
+
+	::float2 positionOffset = {
+		gameState->playerMovementVector.x * gameState->playerMovementSpeed * appState->timer.deltaTime,
+		gameState->playerMovementVector.y * gameState->playerMovementSpeed * appState->timer.deltaTime
+	};
+
+	gameState->playerPosition.x += positionOffset.x;
+	gameState->playerPosition.y += positionOffset.y;
+	gameState->playerPosition.z = 1.0f;
+
+	appState->orbitCamera.position.x = gameState->playerPosition.x;
+	appState->orbitCamera.position.y += positionOffset.y;
+	appState->orbitCamera.lookAt = gameState->playerPosition;
+	appState->orbitCamera.updateViewMatrix();
 }
 
 bool renderer_Initialize(AppState* appState)
@@ -855,9 +864,23 @@ bool renderer_Initialize(AppState* appState)
 				::waitForToken(&texturesToken);
 			}
 
-			appState->materials = (GPUMaterial*)SDL_malloc(sizeof(GPUMaterial) * k_MaxMaterials);
+			appState->materials = (GPUMaterial*)tf_malloc(sizeof(GPUMaterial) * k_MaxMaterials);
 			assert(appState->materials);
 			memset(appState->materials, 0, sizeof(GPUMaterial) * k_MaxMaterials);
+
+			GPUMaterial& playerMaterial = appState->materials[appState->numMaterials++];
+			playerMaterial.baseColor = { 0.8f, 0.8f, 0.8f, 1.0f };
+			playerMaterial.normalIntensity = 1.0f;
+			playerMaterial.occlusionFactor = 1.0f;
+			playerMaterial.roughnessFactor = 0.8f;
+			playerMaterial.metalnessFactor = 0.0f;
+			playerMaterial.emissiveFactor = 0.0f;
+			playerMaterial.reflectance = 0.5f;
+			playerMaterial.uv0Tiling = { 1.0f, 1.0f };
+			playerMaterial.albedoTextureIndex = INVALID_BINDLESS_INDEX;
+			playerMaterial.normalTextureIndex = INVALID_BINDLESS_INDEX;
+			playerMaterial.ormTextureIndex = INVALID_BINDLESS_INDEX;
+			playerMaterial.emissiveTextureIndex = INVALID_BINDLESS_INDEX;
 
 			GPUMaterial& gridMaterial = appState->materials[appState->numMaterials++];
 			gridMaterial.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -905,7 +928,7 @@ bool renderer_Initialize(AppState* appState)
 
 		// Instances
 		{
-			appState->instances = (GPUInstance*)SDL_malloc(sizeof(GPUInstance) * k_MaxInstances);
+			appState->instances = (GPUInstance*)tf_malloc(sizeof(GPUInstance) * k_MaxInstances);
 			assert(appState->instances);
 			memset(appState->instances, 0, sizeof(GPUInstance) * k_MaxInstances);
 
@@ -917,6 +940,31 @@ bool renderer_Initialize(AppState* appState)
 				assert(appState->indirectDrawIndexArgs[i]);
 				memset(appState->indirectDrawIndexArgs[i], 0, sizeof(::IndirectDrawIndexArguments) * appState->maxIndirectDrawIndexArgs);
 				appState->numIndirectDrawIndexArgs[i] = 0;
+			}
+
+			// NOTE: The first entity is the player
+			// Player Instance
+			{
+				uint32_t startInstance = appState->numInstances;
+				assert(startInstance == 0);
+				uint32_t meshIndex = (uint32_t)Meshes::Cube;
+				GPUInstance& instance = appState->instances[appState->numInstances++];
+				::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, 1.0f });
+				::mat4 scale = ::mat4::scale({ 0.25f, 0.25f, 1.0f });
+				loadMat4(translate * scale, &instance.worldMat.m[0]);
+				instance.meshIndex = meshIndex;
+				instance.materialBufferIndex = 0;
+
+				const GPUMesh& mesh = appState->meshes[meshIndex];
+				for (uint32_t i = 0; i < kDataBufferCount; ++i)
+				{
+					::IndirectDrawIndexArguments* drawIndexArgs = &appState->indirectDrawIndexArgs[i][appState->numIndirectDrawIndexArgs[i]++];
+					drawIndexArgs->mIndexCount = mesh.indexCount;
+					drawIndexArgs->mStartIndex = mesh.indexOffset;
+					drawIndexArgs->mVertexOffset = mesh.vertexOffset;
+					drawIndexArgs->mInstanceCount = 1;
+					drawIndexArgs->mStartInstance = startInstance;
+				}
 			}
 
 			// TODO: Do not generate these here, but in the gameplay code (once we have it)
@@ -933,7 +981,7 @@ bool renderer_Initialize(AppState* appState)
 						::mat4 translate = ::mat4::translation({ x + 0.5f, y + 0.5f, 0.0f });
 						loadMat4(translate, &instance.worldMat.m[0]);
 						instance.meshIndex = meshIndex;
-						instance.materialBufferIndex = 0;
+						instance.materialBufferIndex = 1;
 						numInstances++;
 					}
 				}
@@ -951,27 +999,27 @@ bool renderer_Initialize(AppState* appState)
 				}
 			}
 
-			// Damaged Helmet Instance
-			{
-				uint32_t startInstance = appState->numInstances;
-				GPUInstance& instance = appState->instances[appState->numInstances++];
-				::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, 0.75f });
-				loadMat4(translate, &instance.worldMat.m[0]);
-				instance.meshIndex = (uint32_t)Meshes::DamagedHelmet;
-				instance.materialBufferIndex = 1;
+			//// Damaged Helmet Instance
+			//{
+			//	uint32_t startInstance = appState->numInstances;
+			//	GPUInstance& instance = appState->instances[appState->numInstances++];
+			//	::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, 0.75f });
+			//	loadMat4(translate, &instance.worldMat.m[0]);
+			//	instance.meshIndex = (uint32_t)Meshes::DamagedHelmet;
+			//	instance.materialBufferIndex = 1;
 
-				const GPUMesh& mesh = appState->meshes[instance.meshIndex];
+			//	const GPUMesh& mesh = appState->meshes[instance.meshIndex];
 
-				for (uint32_t i = 0; i < kDataBufferCount; ++i)
-				{
-					::IndirectDrawIndexArguments* drawIndexArgs = &appState->indirectDrawIndexArgs[i][appState->numIndirectDrawIndexArgs[i]++];
-					drawIndexArgs->mIndexCount = mesh.indexCount;
-					drawIndexArgs->mStartIndex = mesh.indexOffset;
-					drawIndexArgs->mVertexOffset = mesh.vertexOffset;
-					drawIndexArgs->mInstanceCount = 1;
-					drawIndexArgs->mStartInstance = startInstance;
-				}
-			}
+			//	for (uint32_t i = 0; i < kDataBufferCount; ++i)
+			//	{
+			//		::IndirectDrawIndexArguments* drawIndexArgs = &appState->indirectDrawIndexArgs[i][appState->numIndirectDrawIndexArgs[i]++];
+			//		drawIndexArgs->mIndexCount = mesh.indexCount;
+			//		drawIndexArgs->mStartIndex = mesh.indexOffset;
+			//		drawIndexArgs->mVertexOffset = mesh.vertexOffset;
+			//		drawIndexArgs->mInstanceCount = 2;
+			//		drawIndexArgs->mStartInstance = startInstance;
+			//	}
+			//}
 
 			::BufferLoadDesc desc = {};
 			desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
@@ -1012,7 +1060,7 @@ bool renderer_Initialize(AppState* appState)
 		// Lights
 		{
 			appState->numLights = 3;
-			appState->lights = (GPULight*)SDL_malloc(sizeof(GPULight) * appState->numLights);
+			appState->lights = (GPULight*)tf_malloc(sizeof(GPULight) * appState->numLights);
 			assert(appState->lights);
 			memset(appState->lights, 0, sizeof(GPULight)* appState->numLights);
 
@@ -1073,8 +1121,9 @@ void renderer_Exit(AppState* appState)
 		return;
 	}
 
-	SDL_free(appState->materials);
-	SDL_free(appState->instances);
+	tf_free(appState->materials);
+	tf_free(appState->instances);
+	tf_free(appState->lights);
 
 	renderer_OnUnload(appState, { ::RELOAD_TYPE_ALL });
 
@@ -1391,6 +1440,32 @@ void renderer_Draw(AppState* appState)
 
 		::cmdSetViewport(cmd, 0.0f, 0.0f, (float)windowWidth, (float)windowHeight, 0.0f, 1.0f);
 		::cmdSetScissor(cmd, 0, 0, (uint32_t)windowWidth, (uint32_t)windowHeight);
+
+		// Update Transforms
+		// NOTE(gmodarelli): We should split the instance buffer in dynamic and static.
+		// For now we're just updating the player transform, since it's the only dynamic instance
+		{
+			uint32_t playerInstanceIndex = 0;
+			uint32_t meshIndex = (uint32_t)Meshes::Cube;
+			GPUInstance& instance = appState->instances[playerInstanceIndex];
+			::mat4 translate = ::mat4::translation({
+				appState->gameState.playerPosition.x,
+				appState->gameState.playerPosition.y,
+				appState->gameState.playerPosition.z,
+			}); 
+			::mat4 scale = ::mat4::scale({ 0.25f, 0.25f, 1.0f });
+			loadMat4(translate* scale, &instance.worldMat.m[0]);
+			instance.meshIndex = meshIndex;
+			instance.materialBufferIndex = 0;
+
+			::BufferUpdateDesc updateDesc = {};
+			updateDesc.pBuffer = appState->instanceBuffers[appState->frameIndex];
+			updateDesc.mDstOffset = 0; // The player instance is at the start of the instance buffer
+			updateDesc.mSize = sizeof(GPUInstance);
+			::beginUpdateResource(&updateDesc);
+			memcpy(updateDesc.pMappedData, &instance, sizeof(GPUInstance));
+			::endUpdateResource(&updateDesc);
+		}
 
 		// Render meshes
 		{

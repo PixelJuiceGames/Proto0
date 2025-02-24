@@ -49,7 +49,7 @@ struct Timer
 	}
 };
 
-struct OrbitCamera
+struct PlayerCamera
 {
 	::mat4 viewMatrix;
 	::float3 position;
@@ -459,8 +459,7 @@ struct AppState
 	// Timer
 	Timer timer;
 
-	// Orbit camera data
-	OrbitCamera orbitCamera;
+	PlayerCamera playerCamera;
 
 	// Sun
 	::float3 sunDirection;
@@ -509,9 +508,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	as->gameState.playerMovementVector = { 0.0f, 0.0f };
 	as->gameState.playerMovementSpeed = 2.0f;
 
-	as->orbitCamera.position = { 0.0f, -10.0f, 10.0f };
-	as->orbitCamera.lookAt = { 0.0f, 0.0f, 0.0f };
-	as->orbitCamera.updateViewMatrix();
+	as->playerCamera.position = { 0.0f, -10.0f, 10.0f };
+	as->playerCamera.lookAt = { 0.0f, 0.0f, 0.0f };
+	as->playerCamera.updateViewMatrix();
 
 	as->sunDirection = { 1.0f, 0.0f, -1.0f };
 	as->sunColor = ::srgbToLinearf3({ 1.0f, 1.0f, 1.0f });
@@ -653,10 +652,10 @@ void game_UpdatePlayerMovement(AppState* appState)
 	gameState->playerPosition.y += positionOffset.y;
 	gameState->playerPosition.z = 1.0f;
 
-	appState->orbitCamera.position.x = gameState->playerPosition.x;
-	appState->orbitCamera.position.y += positionOffset.y;
-	appState->orbitCamera.lookAt = gameState->playerPosition;
-	appState->orbitCamera.updateViewMatrix();
+	appState->playerCamera.position.x = gameState->playerPosition.x;
+	appState->playerCamera.position.y += positionOffset.y;
+	appState->playerCamera.lookAt = gameState->playerPosition;
+	appState->playerCamera.updateViewMatrix();
 }
 
 bool renderer_Initialize(AppState* appState)
@@ -1470,7 +1469,7 @@ void renderer_Draw(AppState* appState)
 		// Render meshes
 		{
 			::mat4 projMat = ::mat4::perspectiveRH(1.0471f, windowHeight / (float)windowWidth, 100.0f, 0.01f);
-			::mat4 projViewMat = projMat * appState->orbitCamera.viewMatrix;
+			::mat4 projViewMat = projMat * appState->playerCamera.viewMatrix;
 			Frame frameData = {};
 			loadMat4(projViewMat, &frameData.projViewMat.m[0]);
 			frameData.sunColor = { appState->sunColor.x, appState->sunColor.y, appState->sunColor.z, appState->sunIntensity };

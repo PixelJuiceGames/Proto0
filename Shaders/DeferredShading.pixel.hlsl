@@ -44,8 +44,7 @@ float4 main(FullscreenVaryings varyings) : SV_TARGET
     const float roughness = ORM.g;
     const float metalness = ORM.b;
     const float reflectance = ORM.a;
-    const float4 emission = gGBuffer3.SampleLevel(gLinearClampSampler, varyings.UV, 0);
-    const float emissiveFactor = emission.a;
+    const float3 emission = gGBuffer3.SampleLevel(gLinearClampSampler, varyings.UV, 0).rgb;
     
     float3 Lo = 0.0f;
     
@@ -79,7 +78,7 @@ float4 main(FullscreenVaryings varyings) : SV_TARGET
     }
     
     // Emissions
-    Lo += (emission.rgb * emissiveFactor);
+    Lo += emission.rgb;
     
     return float4(Lo, 1.0f);
 }

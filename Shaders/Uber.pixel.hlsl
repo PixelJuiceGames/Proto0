@@ -63,7 +63,7 @@ GBufferOutput main(Varyings varyings)
     output.GBuffer0 = float4(albedo.rgb, 1.0f);
     output.GBuffer1 = float4(N, 0.0f);
     output.GBuffer2 = float4(occlusion, roughness, metalness, material.reflectance);
-    output.GBuffer3 = float4(emission, material.emissiveFactor);
+    output.GBuffer3 = float4(emission * material.emissiveFactor, 0.0f);
     
     return output;
 }

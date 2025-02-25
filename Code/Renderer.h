@@ -10,5 +10,6 @@ namespace renderer
 	bool OnLoad(::ReloadDesc reloadDesc);
 	void OnUnload(::ReloadDesc reloadDesc);
 
+	void LoadScene(const Scene* scene);
 	void Draw(const Scene* scene);
 }

@@ -30,11 +30,7 @@ struct AppState
 {
 	SDL_Window* window = NULL;
 
-	uint32_t frameIndex = 0;
-
-	// Timer
 	Timer timer;
-
 	Scene scene;
 };
 
@@ -53,13 +49,40 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	*appstate = as;
 
 	// Initialize Scene
-	as->scene.player.position = { 0.0f, 0.0f, 0.0f };
-	as->scene.player.movementSpeed = 2.0f;
-	as->scene.player.movementVector = { 0.0f, 0.0f };
+	{
+		// Player
+		as->scene.player.position = { 0.0f, 0.0f, 0.0f };
+		as->scene.player.scale = { 0.25f, 0.25f, 2.0f };
+		as->scene.player.movementSpeed = 2.0f;
+		as->scene.player.movementVector = { 0.0f, 0.0f };
+		
+		// Player Camera
+		as->scene.playerCamera.position = as->scene.player.position + ::float3{ 0.0f, -10.0f, 10.0f };
+		as->scene.playerCamera.lookAt = { 0.0f, 0.0f, 0.0f };
+		as->scene.playerCamera.updateViewMatrix();
 
-	as->scene.playerCamera.position = { 0.0f, -10.0f, 10.0f };
-	as->scene.playerCamera.lookAt = { 0.0f, 0.0f, 0.0f };
-	as->scene.playerCamera.updateViewMatrix();
+		// Player Light
+		as->scene.playerLight.type = LightType::PointLight;
+		as->scene.playerLight.position = as->scene.player.position + ::float3{ 0.0f, -1.0f, 5.0f };
+		as->scene.playerLight.color = { 1.0f, 1.0f, 1.0f };
+		as->scene.playerLight.intensity = 10.0f;
+		as->scene.playerLight.range = 10.0f;
+
+		// Ground
+		as->scene.entities = (Entity*)SDL_calloc(1024, sizeof(Entity));
+		as->scene.entityCount = 0;
+		for (int32_t y = -10; y < 10; y++)
+		{
+			for (int32_t x = -10; x < 10; x++)
+			{
+				Entity& entity = as->scene.entities[as->scene.entityCount++];
+				entity.position = { x + 0.5f, y + 0.5f, 0.0f };
+				entity.scale = { 1.0f, 1.0f, 1.0f };
+				entity.meshHandle = 0; // plane
+				entity.materialHandle = 1; // grid debug material
+			}
+		}
+	}
 
 	as->window = SDL_CreateWindow("Prototype 0", 1920, 1080, SDL_WINDOW_RESIZABLE);
 	if (!as->window)
@@ -74,6 +97,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 	{
 		return SDL_APP_FAILURE;
 	}
+
+	renderer::LoadScene(&as->scene);
 	
 	SDL_Log("Initialized");
 	return SDL_APP_CONTINUE;
@@ -184,11 +209,14 @@ void game_UpdatePlayerMovement(AppState* appState)
 
 	appState->scene.player.position.x += positionOffset.x;
 	appState->scene.player.position.y += positionOffset.y;
-	appState->scene.player.position.z = 1.0f;
+	appState->scene.player.position.z = appState->scene.player.position.z;
 
-	appState->scene.playerCamera.position.x = appState->scene.player.position.x;
+	appState->scene.playerCamera.position.x += positionOffset.x;
 	appState->scene.playerCamera.position.y += positionOffset.y;
 	appState->scene.playerCamera.lookAt = appState->scene.player.position;
 	appState->scene.playerCamera.updateViewMatrix();
+
+	appState->scene.playerLight.position.x += positionOffset.x;
+	appState->scene.playerLight.position.y += positionOffset.y;
 }
 

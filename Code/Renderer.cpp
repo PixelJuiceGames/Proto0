@@ -32,14 +32,15 @@ extern "C"
 
 static inline void loadMat4(const ::mat4& matrix, float* output);
 
-const uint32_t kDataBufferCount = 2;
-const uint32_t kDownsampleSteps = 8;
-const uint32_t kUpsampleSteps = 7;
+const uint32_t k_DataBufferCount = 2;
+const uint32_t k_DownsampleSteps = 8;
+const uint32_t k_UpsampleSteps = 7;
 
-const uint32_t k_MaxMaterials = 1024;
-const uint32_t k_MaxMeshes = 1024;
-const uint32_t k_MaxInstances = 1024 * 1024;
-const uint32_t k_MaxIndirectDrawIndexArgs = 1024;
+const uint32_t k_LightsMaxCount = 1024;
+const uint32_t k_MaterialsMaxCount = 1024;
+const uint32_t k_MeshesMaxCount = 1024;
+const uint32_t k_InstancesMaxCount = 1024 * 1024;
+const uint32_t k_IndirectDrawCommandsMaxCount = 1024;
 
 enum class Meshes
 {
@@ -55,14 +56,14 @@ struct RendererGeometry
 	MeshVertex* vertices = NULL;
 	uint32_t* indices = NULL;
 
-	uint32_t numVertices = 0;
-	uint32_t numIndices = 0;
+	uint32_t vertexCount = 0;
+	uint32_t indexCount = 0;
 };
 struct ScratchGeometryData
 {
 	RendererGeometry geometry = {};
-	uint32_t maxVertices = 256 * 1024;
-	uint32_t maxIndices = 1024 * 1024;
+	uint32_t verticesMaxCount = 256 * 1024;
+	uint32_t indicexMaxCount = 1024 * 1024;
 
 	bool isInitialized();
 	void initialize();
@@ -86,37 +87,36 @@ struct RendererState
 	::RenderTarget* sceneColor = NULL;
 	::RenderTarget* depthBuffer = NULL;
 
-	::Buffer* downsampleUniformBuffers[kDownsampleSteps] = { NULL };
-	::Buffer* upsampleUniformBuffers[kUpsampleSteps] = { NULL };
-	::Texture* bloomDownsamples[kDownsampleSteps] = { NULL };
-	::Texture* bloomUpsamples[kUpsampleSteps] = { NULL };
+	::Buffer* downsampleUniformBuffers[k_DownsampleSteps] = { NULL };
+	::Buffer* upsampleUniformBuffers[k_UpsampleSteps] = { NULL };
+	::Texture* bloomDownsamples[k_DownsampleSteps] = { NULL };
+	::Texture* bloomUpsamples[k_UpsampleSteps] = { NULL };
 
 	RendererGeometry geometry = {};
 	::Buffer* meshesBuffer = NULL;
 	::Buffer* vertexBuffer = NULL;
 	::Buffer* indexBuffer = NULL;
 
-	::Buffer* frameUniformBuffers[kDataBufferCount] = { NULL };
-	::Buffer* instanceBuffers[kDataBufferCount] = { NULL };
-	::Buffer* materialBuffers[kDataBufferCount] = { NULL };
-	::Buffer* lightBuffers[kDataBufferCount] = { NULL };
-	::Buffer* indirectDrawBuffers[kDataBufferCount] = { NULL };
+	::Buffer* frameUniformBuffers[k_DataBufferCount] = { NULL };
+	::Buffer* instanceBuffers[k_DataBufferCount] = { NULL };
+	::Buffer* materialBuffers[k_DataBufferCount] = { NULL };
+	::Buffer* lightBuffers[k_DataBufferCount] = { NULL };
+	::Buffer* indirectDrawBuffers[k_DataBufferCount] = { NULL };
 
 	GPUMesh* meshes = NULL;
-	uint32_t numMeshes = 0;
+	uint32_t meshCount = 0;
 
 	GPUInstance* instances = NULL;
-	uint32_t numInstances = 0;
+	uint32_t instanceCount = 0;
 
 	GPUMaterial* materials = NULL;
-	uint32_t numMaterials = 0;
-
-	IndirectDrawIndexArguments* indirectDrawIndexArgs[kDataBufferCount] = { NULL };
-	uint32_t maxIndirectDrawIndexArgs = 0;
-	uint32_t numIndirectDrawIndexArgs[kDataBufferCount] = { 0 };
+	uint32_t materialCount = 0;
 
 	GPULight* lights = NULL;
-	uint32_t numLights = 0;
+	uint32_t lightsCount = 0;
+
+	IndirectDrawIndexArguments* indirectDrawIndexArgs = NULL;
+	uint32_t indirectDrawCommandCount = 0;
 
 	// UberShader
 	::Shader* uberShader = NULL;
@@ -235,7 +235,7 @@ namespace renderer
 
 			::GpuCmdRingDesc cmdRingDesc = {};
 			cmdRingDesc.pQueue = g_State->graphicsQueue;
-			cmdRingDesc.mPoolCount = kDataBufferCount;
+			cmdRingDesc.mPoolCount = k_DataBufferCount;
 			cmdRingDesc.mCmdPerPoolCount = 1;
 			cmdRingDesc.mAddSyncPrimitives = true;
 			::initGpuCmdRing(g_State->renderer, &cmdRingDesc, &g_State->graphicsCmdRing);
@@ -277,7 +277,7 @@ namespace renderer
 			ubDesc.mDesc.pName = "Frame Uniform Buffer";
 			ubDesc.mDesc.mSize = sizeof(Frame);
 			ubDesc.pData = NULL;
-			for (uint32_t i = 0; i < kDataBufferCount; ++i)
+			for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 			{
 				ubDesc.ppBuffer = &g_State->frameUniformBuffers[i];
 				::addResource(&ubDesc, NULL);
@@ -293,7 +293,7 @@ namespace renderer
 			ubDesc.mDesc.pName = "Downsample Uniform Buffer";
 			ubDesc.mDesc.mSize = sizeof(DownsampleUniform);
 			ubDesc.pData = NULL;
-			for (uint32_t i = 0; i < kDownsampleSteps; ++i)
+			for (uint32_t i = 0; i < k_DownsampleSteps; ++i)
 			{
 				ubDesc.ppBuffer = &g_State->downsampleUniformBuffers[i];
 				::addResource(&ubDesc, NULL);
@@ -309,7 +309,7 @@ namespace renderer
 			ubDesc.mDesc.pName = "Upsample Uniform Buffer";
 			ubDesc.mDesc.mSize = sizeof(UpsampleUniform);
 			ubDesc.pData = NULL;
-			for (uint32_t i = 0; i < kUpsampleSteps; ++i)
+			for (uint32_t i = 0; i < k_UpsampleSteps; ++i)
 			{
 				ubDesc.ppBuffer = &g_State->upsampleUniformBuffers[i];
 				::addResource(&ubDesc, NULL);
@@ -338,284 +338,182 @@ namespace renderer
 		// Geometry
 		AddGeometry();
 
-		// Temporary instances, materials and lights
+		// Materials
 		{
-			// Materials
+			// Load PBR Textures
 			{
-				// Load PBR Textures
-				{
-					::SyncToken texturesToken = NULL;
+				::SyncToken texturesToken = NULL;
 
-					::TextureLoadDesc textureLoadDesc = {};
-					memset(&textureLoadDesc, 0, sizeof(::TextureLoadDesc));
+				::TextureLoadDesc textureLoadDesc = {};
+				memset(&textureLoadDesc, 0, sizeof(::TextureLoadDesc));
 
-					::TextureDesc textureDesc = {};
-					memset(&textureDesc, 0, sizeof(::TextureDesc));
-					textureDesc.bBindless = true;
-					textureLoadDesc.pDesc = &textureDesc;
+				::TextureDesc textureDesc = {};
+				memset(&textureDesc, 0, sizeof(::TextureDesc));
+				textureDesc.bBindless = true;
+				textureLoadDesc.pDesc = &textureDesc;
 
-					textureLoadDesc.pFileName = "Models/DamagedHelmet_albedo.dds";
-					textureLoadDesc.ppTexture = &g_State->damagedHelmetAlbedoTexture;
-					::addResource(&textureLoadDesc, &texturesToken);
+				textureLoadDesc.pFileName = "Models/DamagedHelmet_albedo.dds";
+				textureLoadDesc.ppTexture = &g_State->damagedHelmetAlbedoTexture;
+				::addResource(&textureLoadDesc, &texturesToken);
 
-					textureLoadDesc.pFileName = "Models/DamagedHelmet_normal.dds";
-					textureLoadDesc.ppTexture = &g_State->damagedHelmetNormalTexture;
-					::addResource(&textureLoadDesc, &texturesToken);
+				textureLoadDesc.pFileName = "Models/DamagedHelmet_normal.dds";
+				textureLoadDesc.ppTexture = &g_State->damagedHelmetNormalTexture;
+				::addResource(&textureLoadDesc, &texturesToken);
 
-					textureLoadDesc.pFileName = "Models/DamagedHelmet_orm.dds";
-					textureLoadDesc.ppTexture = &g_State->damagedHelmetOrmTexture;
-					::addResource(&textureLoadDesc, &texturesToken);
+				textureLoadDesc.pFileName = "Models/DamagedHelmet_orm.dds";
+				textureLoadDesc.ppTexture = &g_State->damagedHelmetOrmTexture;
+				::addResource(&textureLoadDesc, &texturesToken);
 
-					textureLoadDesc.pFileName = "Models/DamagedHelmet_emissive.dds";
-					textureLoadDesc.ppTexture = &g_State->damagedHelmetEmissiveTexture;
-					::addResource(&textureLoadDesc, &texturesToken);
+				textureLoadDesc.pFileName = "Models/DamagedHelmet_emissive.dds";
+				textureLoadDesc.ppTexture = &g_State->damagedHelmetEmissiveTexture;
+				::addResource(&textureLoadDesc, &texturesToken);
 
-					textureLoadDesc.pFileName = "Textures/Debug/Grid_albedo.dds";
-					textureLoadDesc.ppTexture = &g_State->gridAlbedoTexture;
-					::addResource(&textureLoadDesc, &texturesToken);
+				textureLoadDesc.pFileName = "Textures/Debug/Grid_albedo.dds";
+				textureLoadDesc.ppTexture = &g_State->gridAlbedoTexture;
+				::addResource(&textureLoadDesc, &texturesToken);
 
-					textureLoadDesc.pFileName = "Textures/Debug/Grid_orm.dds";
-					textureLoadDesc.ppTexture = &g_State->gridOrmTexture;
-					::addResource(&textureLoadDesc, &texturesToken);
+				textureLoadDesc.pFileName = "Textures/Debug/Grid_orm.dds";
+				textureLoadDesc.ppTexture = &g_State->gridOrmTexture;
+				::addResource(&textureLoadDesc, &texturesToken);
 
-					::waitForToken(&texturesToken);
-				}
-
-				g_State->materials = (GPUMaterial*)tf_malloc(sizeof(GPUMaterial) * k_MaxMaterials);
-				ASSERT(g_State->materials);
-				memset(g_State->materials, 0, sizeof(GPUMaterial) * k_MaxMaterials);
-
-				GPUMaterial& playerMaterial = g_State->materials[g_State->numMaterials++];
-				playerMaterial.baseColor = { 0.8f, 0.8f, 0.8f, 1.0f };
-				playerMaterial.normalIntensity = 1.0f;
-				playerMaterial.occlusionFactor = 1.0f;
-				playerMaterial.roughnessFactor = 0.8f;
-				playerMaterial.metalnessFactor = 0.0f;
-				playerMaterial.emissiveFactor = 0.0f;
-				playerMaterial.reflectance = 0.5f;
-				playerMaterial.uv0Tiling = { 1.0f, 1.0f };
-				playerMaterial.albedoTextureIndex = INVALID_BINDLESS_INDEX;
-				playerMaterial.normalTextureIndex = INVALID_BINDLESS_INDEX;
-				playerMaterial.ormTextureIndex = INVALID_BINDLESS_INDEX;
-				playerMaterial.emissiveTextureIndex = INVALID_BINDLESS_INDEX;
-
-				GPUMaterial& gridMaterial = g_State->materials[g_State->numMaterials++];
-				gridMaterial.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-				gridMaterial.normalIntensity = 1.0f;
-				gridMaterial.occlusionFactor = 1.0f;
-				gridMaterial.roughnessFactor = 1.0f;
-				gridMaterial.metalnessFactor = 0.0f;
-				gridMaterial.emissiveFactor = 0.0f;
-				gridMaterial.reflectance = 0.5f;
-				gridMaterial.uv0Tiling = { 1.0f, 1.0f };
-				gridMaterial.albedoTextureIndex = g_State->gridAlbedoTexture->mDx.mDescriptors;
-				gridMaterial.normalTextureIndex = INVALID_BINDLESS_INDEX;
-				gridMaterial.ormTextureIndex = g_State->gridOrmTexture->mDx.mDescriptors;
-				gridMaterial.emissiveTextureIndex = INVALID_BINDLESS_INDEX;
-
-				GPUMaterial& damagedHelmetMaterial = g_State->materials[g_State->numMaterials++];
-				damagedHelmetMaterial.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-				damagedHelmetMaterial.normalIntensity = 1.0f;
-				damagedHelmetMaterial.occlusionFactor = 1.0f;
-				damagedHelmetMaterial.roughnessFactor = 1.0f;
-				damagedHelmetMaterial.metalnessFactor = 0.0f;
-				damagedHelmetMaterial.emissiveFactor = 2.0f;
-				damagedHelmetMaterial.reflectance = 0.5f;
-				damagedHelmetMaterial.uv0Tiling = { 1.0f, 1.0f };
-				damagedHelmetMaterial.albedoTextureIndex = g_State->damagedHelmetAlbedoTexture->mDx.mDescriptors;
-				damagedHelmetMaterial.normalTextureIndex = g_State->damagedHelmetNormalTexture->mDx.mDescriptors;
-				damagedHelmetMaterial.ormTextureIndex = g_State->damagedHelmetOrmTexture->mDx.mDescriptors;
-				damagedHelmetMaterial.emissiveTextureIndex = g_State->damagedHelmetEmissiveTexture->mDx.mDescriptors;
-
-				::BufferLoadDesc desc = {};
-				desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
-				desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
-				desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-				desc.mDesc.mSize = sizeof(GPUMaterial) * k_MaxMaterials;
-				desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
-				desc.mDesc.bBindless = true;
-				desc.pData = g_State->materials;
-				desc.mDesc.pName = "Materials Buffer";
-				for (uint32_t i = 0; i < kDataBufferCount; ++i)
-				{
-					desc.ppBuffer = &g_State->materialBuffers[i];
-					::addResource(&desc, NULL);
-				}
+				::waitForToken(&texturesToken);
 			}
 
-			// Instances
+			g_State->materials = (GPUMaterial*)tf_malloc(sizeof(GPUMaterial) * k_MaterialsMaxCount);
+			ASSERT(g_State->materials);
+			memset(g_State->materials, 0, sizeof(GPUMaterial) * k_MaterialsMaxCount);
+
+			GPUMaterial& playerMaterial = g_State->materials[g_State->materialCount++];
+			playerMaterial.baseColor = { 0.8f, 0.8f, 0.8f, 1.0f };
+			playerMaterial.normalIntensity = 1.0f;
+			playerMaterial.occlusionFactor = 1.0f;
+			playerMaterial.roughnessFactor = 0.8f;
+			playerMaterial.metalnessFactor = 0.0f;
+			playerMaterial.emissiveFactor = 0.0f;
+			playerMaterial.reflectance = 0.5f;
+			playerMaterial.uv0Tiling = { 1.0f, 1.0f };
+			playerMaterial.albedoTextureIndex = INVALID_BINDLESS_INDEX;
+			playerMaterial.normalTextureIndex = INVALID_BINDLESS_INDEX;
+			playerMaterial.ormTextureIndex = INVALID_BINDLESS_INDEX;
+			playerMaterial.emissiveTextureIndex = INVALID_BINDLESS_INDEX;
+
+			GPUMaterial& gridMaterial = g_State->materials[g_State->materialCount++];
+			gridMaterial.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+			gridMaterial.normalIntensity = 1.0f;
+			gridMaterial.occlusionFactor = 1.0f;
+			gridMaterial.roughnessFactor = 1.0f;
+			gridMaterial.metalnessFactor = 0.0f;
+			gridMaterial.emissiveFactor = 0.0f;
+			gridMaterial.reflectance = 0.5f;
+			gridMaterial.uv0Tiling = { 1.0f, 1.0f };
+			gridMaterial.albedoTextureIndex = g_State->gridAlbedoTexture->mDx.mDescriptors;
+			gridMaterial.normalTextureIndex = INVALID_BINDLESS_INDEX;
+			gridMaterial.ormTextureIndex = g_State->gridOrmTexture->mDx.mDescriptors;
+			gridMaterial.emissiveTextureIndex = INVALID_BINDLESS_INDEX;
+
+			GPUMaterial& damagedHelmetMaterial = g_State->materials[g_State->materialCount++];
+			damagedHelmetMaterial.baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+			damagedHelmetMaterial.normalIntensity = 1.0f;
+			damagedHelmetMaterial.occlusionFactor = 1.0f;
+			damagedHelmetMaterial.roughnessFactor = 1.0f;
+			damagedHelmetMaterial.metalnessFactor = 0.0f;
+			damagedHelmetMaterial.emissiveFactor = 2.0f;
+			damagedHelmetMaterial.reflectance = 0.5f;
+			damagedHelmetMaterial.uv0Tiling = { 1.0f, 1.0f };
+			damagedHelmetMaterial.albedoTextureIndex = g_State->damagedHelmetAlbedoTexture->mDx.mDescriptors;
+			damagedHelmetMaterial.normalTextureIndex = g_State->damagedHelmetNormalTexture->mDx.mDescriptors;
+			damagedHelmetMaterial.ormTextureIndex = g_State->damagedHelmetOrmTexture->mDx.mDescriptors;
+			damagedHelmetMaterial.emissiveTextureIndex = g_State->damagedHelmetEmissiveTexture->mDx.mDescriptors;
+
+			::BufferLoadDesc desc = {};
+			desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
+			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
+			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
+			desc.mDesc.mSize = sizeof(GPUMaterial) * k_MaterialsMaxCount;
+			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
+			desc.mDesc.bBindless = true;
+			desc.pData = g_State->materials;
+			desc.mDesc.pName = "Materials Buffer";
+			for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 			{
-				g_State->instances = (GPUInstance*)tf_malloc(sizeof(GPUInstance) * k_MaxInstances);
-				ASSERT(g_State->instances);
-				memset(g_State->instances, 0, sizeof(GPUInstance)* k_MaxInstances);
+				desc.ppBuffer = &g_State->materialBuffers[i];
+				::addResource(&desc, NULL);
+			}
+		}
 
-				g_State->maxIndirectDrawIndexArgs = k_MaxIndirectDrawIndexArgs;
+		// Instances
+		{
+			g_State->instances = (GPUInstance*)tf_malloc(sizeof(GPUInstance) * k_InstancesMaxCount);
+			ASSERT(g_State->instances);
+			memset(g_State->instances, 0, sizeof(GPUInstance)* k_InstancesMaxCount);
+			g_State->instanceCount = 0;
 
-				for (uint32_t i = 0; i < kDataBufferCount; ++i)
-				{
-					g_State->indirectDrawIndexArgs[i] = (::IndirectDrawIndexArguments*)tf_malloc(sizeof(::IndirectDrawIndexArguments) * g_State->maxIndirectDrawIndexArgs);
-					ASSERT(g_State->indirectDrawIndexArgs[i]);
-					memset(g_State->indirectDrawIndexArgs[i], 0, sizeof(::IndirectDrawIndexArguments) * g_State->maxIndirectDrawIndexArgs);
-					g_State->numIndirectDrawIndexArgs[i] = 0;
-				}
+			g_State->indirectDrawIndexArgs = (::IndirectDrawIndexArguments*)tf_malloc(sizeof(::IndirectDrawIndexArguments) * k_IndirectDrawCommandsMaxCount);
+			ASSERT(g_State->indirectDrawIndexArgs);
+			memset(g_State->indirectDrawIndexArgs, 0, sizeof(::IndirectDrawIndexArguments) * k_IndirectDrawCommandsMaxCount);
+			g_State->indirectDrawCommandCount = 0;
 
-				// NOTE: The first entity is the player
-				// Player Instance
-				{
-					uint32_t startInstance = g_State->numInstances;
-					ASSERT(startInstance == 0);
-					uint32_t meshIndex = (uint32_t)Meshes::Cube;
-					GPUInstance& instance = g_State->instances[g_State->numInstances++];
-					::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, 1.0f });
-					::mat4 scale = ::mat4::scale({ 0.25f, 0.25f, 1.0f });
-					loadMat4(translate * scale, &instance.worldMat.m[0]);
-					instance.meshIndex = meshIndex;
-					instance.materialBufferIndex = 0;
-
-					const GPUMesh& mesh = g_State->meshes[meshIndex];
-					for (uint32_t i = 0; i < kDataBufferCount; ++i)
-					{
-						::IndirectDrawIndexArguments* drawIndexArgs = &g_State->indirectDrawIndexArgs[i][g_State->numIndirectDrawIndexArgs[i]++];
-						drawIndexArgs->mIndexCount = mesh.indexCount;
-						drawIndexArgs->mStartIndex = mesh.indexOffset;
-						drawIndexArgs->mVertexOffset = mesh.vertexOffset;
-						drawIndexArgs->mInstanceCount = 1;
-						drawIndexArgs->mStartInstance = startInstance;
-					}
-				}
-
-				// TODO: Do not generate these here, but in the gameplay code (once we have it)
-				// Plane Instances for the ground
-				{
-					uint32_t startInstance = g_State->numInstances;
-					uint32_t numInstances = 0;
-					uint32_t meshIndex = (uint32_t)Meshes::Plane;
-					for (int32_t y = -50; y < 50; y++)
-					{
-						for (int32_t x = -50; x < 50; x++)
-						{
-							GPUInstance& instance = g_State->instances[g_State->numInstances++];
-							::mat4 translate = ::mat4::translation({ x + 0.5f, y + 0.5f, 0.0f });
-							loadMat4(translate, &instance.worldMat.m[0]);
-							instance.meshIndex = meshIndex;
-							instance.materialBufferIndex = 1;
-							numInstances++;
-						}
-					}
-
-					const GPUMesh& mesh = g_State->meshes[meshIndex];
-
-					for (uint32_t i = 0; i < kDataBufferCount; ++i)
-					{
-						::IndirectDrawIndexArguments* drawIndexArgs = &g_State->indirectDrawIndexArgs[i][g_State->numIndirectDrawIndexArgs[i]++];
-						drawIndexArgs->mIndexCount = mesh.indexCount;
-						drawIndexArgs->mStartIndex = mesh.indexOffset;
-						drawIndexArgs->mVertexOffset = mesh.vertexOffset;
-						drawIndexArgs->mInstanceCount = numInstances;
-						drawIndexArgs->mStartInstance = startInstance;
-					}
-				}
-
-				//// Damaged Helmet Instance
-				//{
-				//	uint32_t startInstance = g_State->numInstances;
-				//	GPUInstance& instance = g_State->instances[g_State->numInstances++];
-				//	::mat4 translate = ::mat4::translation({ 0.0f, 0.0f, 0.75f });
-				//	loadMat4(translate, &instance.worldMat.m[0]);
-				//	instance.meshIndex = (uint32_t)Meshes::DamagedHelmet;
-				//	instance.materialBufferIndex = 1;
-
-				//	const GPUMesh& mesh = g_State->meshes[instance.meshIndex];
-
-				//	for (uint32_t i = 0; i < kDataBufferCount; ++i)
-				//	{
-				//		::IndirectDrawIndexArguments* drawIndexArgs = &g_State->indirectDrawIndexArgs[i][g_State->numIndirectDrawIndexArgs[i]++];
-				//		drawIndexArgs->mIndexCount = mesh.indexCount;
-				//		drawIndexArgs->mStartIndex = mesh.indexOffset;
-				//		drawIndexArgs->mVertexOffset = mesh.vertexOffset;
-				//		drawIndexArgs->mInstanceCount = 2;
-				//		drawIndexArgs->mStartInstance = startInstance;
-				//	}
-				//}
-
+			// Instance buffers
+			{
 				::BufferLoadDesc desc = {};
 				desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
 				desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 				desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-				desc.mDesc.mSize = sizeof(GPUInstance) * k_MaxInstances;
+				desc.mDesc.mSize = sizeof(GPUInstance) * k_InstancesMaxCount;
 				desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
 				desc.mDesc.bBindless = true;
-				desc.pData = g_State->instances;
 				desc.mDesc.pName = "Instances Buffer";
-				for (uint32_t i = 0; i < kDataBufferCount; ++i)
+				desc.pData = NULL;
+
+				for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 				{
 					desc.ppBuffer = &g_State->instanceBuffers[i];
 					::addResource(&desc, NULL);
 				}
-
-				// Indirect draw args buffers
-				{
-					::BufferLoadDesc desc = {};
-					desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_INDIRECT_BUFFER;
-					desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
-					desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-					desc.mDesc.mSize = sizeof(::IndirectDrawIndexArguments) * g_State->maxIndirectDrawIndexArgs;
-					desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
-					desc.mDesc.bBindless = false;
-					desc.mDesc.mStartState = ::RESOURCE_STATE_INDIRECT_ARGUMENT;
-					desc.mDesc.pName = "Indirect Draw Buffer";
-
-					for (uint32_t i = 0; i < kDataBufferCount; ++i)
-					{
-						desc.pData = g_State->indirectDrawIndexArgs[i];
-						desc.ppBuffer = &g_State->indirectDrawBuffers[i];
-						::addResource(&desc, NULL);
-					}
-				}
 			}
 
-			// Lights
+			// Indirect draw args buffers
 			{
-				g_State->numLights = 3;
-				g_State->lights = (GPULight*)tf_malloc(sizeof(GPULight) * g_State->numLights);
-				ASSERT(g_State->lights);
-				memset(g_State->lights, 0, sizeof(GPULight)* g_State->numLights);
-
-				// Key light
-				GPULight& keyLight = g_State->lights[0];
-				keyLight.position = { 4.0f, -4.0f, 5.5f };
-				keyLight.range = 15.0f;
-				keyLight.color = ::srgbToLinearf3({ 1.0f, 0.2f, 0.2f });
-				keyLight.intensity = 10.0f;
-
-				// Fill light
-				GPULight& fillLight = g_State->lights[1];
-				fillLight.position = { -4.0f, -3.0f, 5.5f };
-				fillLight.range = 15.0f;
-				fillLight.color = ::srgbToLinearf3({ 0.2f, 0.2f, 1.0f });
-				fillLight.intensity = 5.0f;
-
-				// Back light
-				GPULight& backLight = g_State->lights[2];
-				backLight.position = { 0.0f, 3.0f, 8.0f };
-				backLight.range = 15.0f;
-				backLight.color = ::srgbToLinearf3({ 0.2f, 1.0, 0.2f });
-				backLight.intensity = 10.0f;
-
 				::BufferLoadDesc desc = {};
-				desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
+				desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_INDIRECT_BUFFER;
 				desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 				desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-				desc.mDesc.mSize = sizeof(GPUInstance) * g_State->numLights;
+				desc.mDesc.mSize = sizeof(::IndirectDrawIndexArguments) * k_IndirectDrawCommandsMaxCount;
 				desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
-				desc.mDesc.bBindless = true;
-				desc.pData = g_State->lights;
-				desc.mDesc.pName = "Lights Buffer";
-				for (uint32_t i = 0; i < kDataBufferCount; ++i)
+				desc.mDesc.mStartState = ::RESOURCE_STATE_INDIRECT_ARGUMENT;
+				desc.mDesc.bBindless = false;
+				desc.mDesc.pName = "Indirect Draw Buffer";
+				desc.pData = NULL;
+
+				for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 				{
-					desc.ppBuffer = &g_State->lightBuffers[i];
+					desc.ppBuffer = &g_State->indirectDrawBuffers[i];
 					::addResource(&desc, NULL);
 				}
+			}
+		}
+
+		// Lights
+		{
+			g_State->lights = (GPULight*)tf_malloc(sizeof(GPULight) * k_LightsMaxCount);
+			ASSERT(g_State->lights);
+			memset(g_State->lights, 0, sizeof(GPULight) * k_LightsMaxCount);
+			g_State->lightsCount = 0;
+
+			::BufferLoadDesc desc = {};
+			desc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
+			desc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
+			desc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
+			desc.mDesc.mSize = sizeof(GPUInstance) * k_LightsMaxCount;
+			desc.mDesc.mElementCount = (uint32_t)(desc.mDesc.mSize / sizeof(uint32_t));
+			desc.mDesc.bBindless = true;
+			desc.mDesc.pName = "Lights Buffer";
+			desc.pData = NULL;
+
+			for (uint32_t i = 0; i < k_DataBufferCount; ++i)
+			{
+				desc.ppBuffer = &g_State->lightBuffers[i];
+				::addResource(&desc, NULL);
 			}
 		}
 
@@ -659,7 +557,7 @@ namespace renderer
 		::removeSampler(g_State->renderer, g_State->linearRepeatSampler);
 		::removeSampler(g_State->renderer, g_State->linearClampSampler);
 
-		for (uint32_t i = 0; i < kDataBufferCount; ++i)
+		for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 		{
 			::removeResource(g_State->frameUniformBuffers[i]);
 			::removeResource(g_State->materialBuffers[i]);
@@ -667,18 +565,18 @@ namespace renderer
 			::removeResource(g_State->lightBuffers[i]);
 		}
 
-		for (uint32_t i = 0; i < kDataBufferCount; ++i)
+		for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 		{
 			::removeResource(g_State->indirectDrawBuffers[i]);
-			tf_free(g_State->indirectDrawIndexArgs[i]);
 		}
+		tf_free(g_State->indirectDrawIndexArgs);
 
-		for (uint32_t i = 0; i < kDownsampleSteps; ++i)
+		for (uint32_t i = 0; i < k_DownsampleSteps; ++i)
 		{
 			::removeResource(g_State->downsampleUniformBuffers[i]);
 		}
 
-		for (uint32_t i = 0; i < kUpsampleSteps; ++i)
+		for (uint32_t i = 0; i < k_UpsampleSteps; ++i)
 		{
 			::removeResource(g_State->upsampleUniformBuffers[i]);
 		}
@@ -757,6 +655,130 @@ namespace renderer
 		}
 	}
 
+	void LoadScene(const Scene* scene)
+	{
+		ASSERT(g_State->instances);
+		ASSERT(g_State->indirectDrawIndexArgs);
+
+		g_State->instanceCount = 0;
+		memset(g_State->instances, 0, sizeof(GPUInstance) * k_InstancesMaxCount);
+
+		g_State->indirectDrawCommandCount = 0;
+		memset(g_State->indirectDrawIndexArgs, 0, sizeof(IndirectDrawIndexArguments) * k_IndirectDrawCommandsMaxCount);
+
+		// NOTE: The first instance in the instances buffer stores the player instance
+		{
+			ASSERT(g_State->instanceCount == 0);
+			GPUInstance* playerInstance = &g_State->instances[g_State->instanceCount++];
+			const Player* player = &scene->player;
+			::mat4 translate = ::mat4::translation({ player->position.x, player->position.y, player->position.z });
+			::mat4 scale = ::mat4::scale({ player->scale.x, player->scale.y, player->scale.z });
+			loadMat4(translate * scale, &playerInstance->worldMat.m[0]);
+			// TODO(gmodarelli): Find a way to associate a mesh/material to an entity in the scene
+			uint32_t meshIndex = (uint32_t)Meshes::Cube;
+			playerInstance->meshIndex = meshIndex;
+			playerInstance->materialBufferIndex = 0;
+
+			// NOTE(gmodarelli): We are currently creating indirect draw arguments on the CPU,
+			// but we will move this to the GPU when we start implementing GPU-driven rendering
+			ASSERT(g_State->indirectDrawCommandCount == 0);
+			const GPUMesh& mesh = g_State->meshes[meshIndex];
+			::IndirectDrawIndexArguments* drawIndexArgs = &g_State->indirectDrawIndexArgs[g_State->indirectDrawCommandCount++];
+			drawIndexArgs->mIndexCount = mesh.indexCount;
+			drawIndexArgs->mStartIndex = mesh.indexOffset;
+			drawIndexArgs->mVertexOffset = mesh.vertexOffset;
+			drawIndexArgs->mInstanceCount = 1;
+			drawIndexArgs->mStartInstance = 0;
+		}
+
+		// Load all other instances
+		if (scene->entityCount > 0)
+		{
+			::IndirectDrawIndexArguments currentIndirectDrawArgs = {};
+
+			for (uint32_t i = 0; i < scene->entityCount; ++i)
+			{
+				const Entity* entity = &scene->entities[i];
+				const GPUMesh& mesh = g_State->meshes[entity->meshHandle];
+				
+				if (i == 0)
+				{
+					currentIndirectDrawArgs.mIndexCount = mesh.indexCount;
+					currentIndirectDrawArgs.mStartIndex = mesh.indexOffset;
+					currentIndirectDrawArgs.mVertexOffset = mesh.vertexOffset;
+					currentIndirectDrawArgs.mInstanceCount = 1;
+					currentIndirectDrawArgs.mStartInstance = g_State->instanceCount;
+
+					GPUInstance* instance = &g_State->instances[g_State->instanceCount++];
+					::mat4 translate = ::mat4::translation({ entity->position.x, entity->position.y, entity->position.z });
+					::mat4 scale = ::mat4::scale({ entity->scale.x, entity->scale.y, entity->scale.z });
+					loadMat4(translate * scale, &instance->worldMat.m[0]);
+					instance->meshIndex = entity->meshHandle;
+					instance->materialBufferIndex = entity->materialHandle;
+
+					continue;
+				}
+
+				if (entity->meshHandle != g_State->instances[g_State->instanceCount - 1].meshIndex)
+				{
+					::IndirectDrawIndexArguments* indirectDrawArgs = &g_State->indirectDrawIndexArgs[g_State->indirectDrawCommandCount++];
+					memcpy(indirectDrawArgs, &currentIndirectDrawArgs, sizeof(::IndirectDrawIndexArguments));
+
+					currentIndirectDrawArgs.mIndexCount = mesh.indexCount;
+					currentIndirectDrawArgs.mStartIndex = mesh.indexOffset;
+					currentIndirectDrawArgs.mVertexOffset = mesh.vertexOffset;
+					currentIndirectDrawArgs.mInstanceCount = 1;
+					currentIndirectDrawArgs.mStartInstance = g_State->instanceCount;
+
+					GPUInstance* instance = &g_State->instances[g_State->instanceCount++];
+					::mat4 translate = ::mat4::translation({ entity->position.x, entity->position.y, entity->position.z });
+					::mat4 scale = ::mat4::scale({ entity->scale.x, entity->scale.y, entity->scale.z });
+					loadMat4(translate * scale, &instance->worldMat.m[0]);
+					instance->meshIndex = entity->meshHandle;
+					instance->materialBufferIndex = entity->materialHandle;
+				}
+				else
+				{
+					GPUInstance* instance = &g_State->instances[g_State->instanceCount++];
+					::mat4 translate = ::mat4::translation({ entity->position.x, entity->position.y, entity->position.z });
+					::mat4 scale = ::mat4::scale({ entity->scale.x, entity->scale.y, entity->scale.z });
+					loadMat4(translate * scale, &instance->worldMat.m[0]);
+					instance->meshIndex = entity->meshHandle;
+					instance->materialBufferIndex = entity->materialHandle;
+
+					currentIndirectDrawArgs.mInstanceCount += 1;
+				}
+			}
+
+			::IndirectDrawIndexArguments* indirectDrawArgs = &g_State->indirectDrawIndexArgs[g_State->indirectDrawCommandCount++];
+			memcpy(indirectDrawArgs, &currentIndirectDrawArgs, sizeof(::IndirectDrawIndexArguments));
+		}
+
+		ASSERT(g_State->lights);
+		g_State->lightsCount = 0;
+		memset(g_State->lights, 0, sizeof(GPULight) * k_LightsMaxCount);
+
+		// NOTE: The first light in the lights buffer stores the player light
+		{
+			ASSERT(g_State->lightsCount == 0);
+			GPULight* playerLight = &g_State->lights[g_State->lightsCount++];
+			playerLight->position = scene->playerLight.position;
+			playerLight->range = scene->playerLight.range;
+			playerLight->color = ::srgbToLinearf3(scene->playerLight.color);
+			playerLight->intensity = scene->playerLight.intensity;
+		}
+
+		for (uint32_t i = 0; i < scene->lightCount; ++i)
+		{
+			GPULight* gpuLight = &g_State->lights[g_State->lightsCount++];
+			const Light* light = &scene->lights[i];
+			gpuLight->position = light->position;
+			gpuLight->range = light->range;
+			gpuLight->color = ::srgbToLinearf3(light->color);
+			gpuLight->intensity = light->intensity;
+		}
+	}
+
 	void Draw(const Scene* scene)
 	{
 		RECT rect;
@@ -821,18 +843,59 @@ namespace renderer
 					scene->player.position.y,
 					scene->player.position.z,
 				});
-				::mat4 scale = ::mat4::scale({ 0.25f, 0.25f, 1.0f });
+				::mat4 scale = ::mat4::scale({ scene->player.scale.x, scene->player.scale.y, scene->player.scale.z });
 				loadMat4(translate * scale, &instance.worldMat.m[0]);
 				instance.meshIndex = meshIndex;
 				instance.materialBufferIndex = 0;
+			}
 
-				::BufferUpdateDesc updateDesc = {};
-				updateDesc.pBuffer = g_State->instanceBuffers[g_State->frameIndex];
-				updateDesc.mDstOffset = 0; // The player instance is at the start of the instance buffer
-				updateDesc.mSize = sizeof(GPUInstance);
-				::beginUpdateResource(&updateDesc);
-				memcpy(updateDesc.pMappedData, &instance, sizeof(GPUInstance));
-				::endUpdateResource(&updateDesc);
+			// Update player light
+			{
+				uint32_t playerLightInstance = 0;
+				GPULight* playerLight = &g_State->lights[playerLightInstance];
+				playerLight->position = scene->playerLight.position;
+				playerLight->range = scene->playerLight.range;
+				playerLight->color = ::srgbToLinearf3(scene->playerLight.color);
+				playerLight->intensity = scene->playerLight.intensity;
+			}
+
+			// TODO(gmodarelli): Figure out a way to update only the data that actually
+			// changed
+			{
+				// Upload all instances to the GPU
+				{
+					::BufferUpdateDesc updateDesc = {};
+					updateDesc.pBuffer = g_State->instanceBuffers[g_State->frameIndex];
+					updateDesc.mDstOffset = 0;
+					updateDesc.mSize = sizeof(GPUInstance) * g_State->instanceCount;
+					::beginUpdateResource(&updateDesc);
+					memcpy(updateDesc.pMappedData, g_State->instances, sizeof(GPUInstance) * g_State->instanceCount);
+					::endUpdateResource(&updateDesc);
+				}
+
+				// NOTE(gmodarelli): We are currently creating indirect draw arguments on the CPU,
+				// but we will move this to the GPU when we start implementing GPU-driven rendering
+				// Upload all indirect draw args to the GPU
+				{
+					::BufferUpdateDesc updateDesc = {};
+					updateDesc.pBuffer = g_State->indirectDrawBuffers[g_State->frameIndex];
+					updateDesc.mDstOffset = 0;
+					updateDesc.mSize = sizeof(IndirectDrawIndexArguments) * g_State->indirectDrawCommandCount;
+					::beginUpdateResource(&updateDesc);
+					memcpy(updateDesc.pMappedData, g_State->indirectDrawIndexArgs, sizeof(::IndirectDrawIndexArguments) * g_State->indirectDrawCommandCount);
+					::endUpdateResource(&updateDesc);
+				}
+
+				// Upload all lights to the GPU
+				{
+					::BufferUpdateDesc updateDesc = {};
+					updateDesc.pBuffer = g_State->lightBuffers[g_State->frameIndex];
+					updateDesc.mDstOffset = 0;
+					updateDesc.mSize = sizeof(GPULight) * g_State->lightsCount;
+					::beginUpdateResource(&updateDesc);
+					memcpy(updateDesc.pMappedData, g_State->lights, sizeof(GPULight) * g_State->lightsCount);
+					::endUpdateResource(&updateDesc);
+				}
 			}
 
 			// Render meshes
@@ -848,7 +911,7 @@ namespace renderer
 				frameData.materialBufferIndex = (uint32_t)g_State->materialBuffers[g_State->frameIndex]->mDx.mDescriptors;
 				frameData.instanceBufferIndex = (uint32_t)g_State->instanceBuffers[g_State->frameIndex]->mDx.mDescriptors;
 				frameData.lightBufferIndex = (uint32_t)g_State->lightBuffers[g_State->frameIndex]->mDx.mDescriptors;
-				frameData.numLights = g_State->numLights;
+				frameData.numLights = g_State->lightsCount;
 
 				::BufferUpdateDesc desc = { g_State->frameUniformBuffers[g_State->frameIndex] };
 				::beginUpdateResource(&desc);
@@ -869,7 +932,7 @@ namespace renderer
 		// Bloom
 		{
 			// Downsample
-			for (uint32_t i = 0; i < kDownsampleSteps; ++i)
+			for (uint32_t i = 0; i < k_DownsampleSteps; ++i)
 			{
 				// NOTE(gmodarelli): This could be a simple push constant
 				DownsampleUniform uniform = {};
@@ -914,19 +977,19 @@ namespace renderer
 			}
 
 			// Upsample
-			for (uint32_t i = 0; i < kUpsampleSteps; ++i)
+			for (uint32_t i = 0; i < k_UpsampleSteps; ++i)
 			{
 				UpsampleUniform uniform = {};
 				uniform.radius = 0.75f;
 
 				if (i == 0)
 				{
-					uniform.inputSize = { g_State->bloomDownsamples[kDownsampleSteps - 1]->mWidth, g_State->bloomDownsamples[kDownsampleSteps - 1]->mHeight };
+					uniform.inputSize = { g_State->bloomDownsamples[k_DownsampleSteps - 1]->mWidth, g_State->bloomDownsamples[k_DownsampleSteps - 1]->mHeight };
 
 					// Resource Barriers
 					{
 						::TextureBarrier tBarriers[] = {
-							{ g_State->bloomDownsamples[kDownsampleSteps - 1], ::RESOURCE_STATE_UNORDERED_ACCESS, ::RESOURCE_STATE_SHADER_RESOURCE },
+							{ g_State->bloomDownsamples[k_DownsampleSteps - 1], ::RESOURCE_STATE_UNORDERED_ACCESS, ::RESOURCE_STATE_SHADER_RESOURCE },
 							{ g_State->bloomUpsamples[i], ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_UNORDERED_ACCESS }
 						};
 						::cmdResourceBarrier(cmd, 0, NULL, TF_ARRAY_COUNT(tBarriers), tBarriers, 0, NULL);
@@ -960,7 +1023,7 @@ namespace renderer
 			// Resource Barriers
 			{
 				::TextureBarrier tBarriers[] = {
-					{ g_State->bloomUpsamples[kUpsampleSteps - 1], ::RESOURCE_STATE_UNORDERED_ACCESS, ::RESOURCE_STATE_SHADER_RESOURCE }
+					{ g_State->bloomUpsamples[k_UpsampleSteps - 1], ::RESOURCE_STATE_UNORDERED_ACCESS, ::RESOURCE_STATE_SHADER_RESOURCE }
 				};
 				::cmdResourceBarrier(cmd, 0, NULL, TF_ARRAY_COUNT(tBarriers), tBarriers, 0, NULL);
 			}
@@ -1031,7 +1094,7 @@ namespace renderer
 
 		::queuePresent(g_State->graphicsQueue, &presentDesc);
 
-		g_State->frameIndex = (g_State->frameIndex + 1) % kDataBufferCount;
+		g_State->frameIndex = (g_State->frameIndex + 1) % k_DataBufferCount;
 	}
 }
 
@@ -1139,7 +1202,7 @@ bool AddRenderTargets()
 		loadDesc.pDesc = &desc;
 
 		::SyncToken texturesToken = NULL;
-		for (uint32_t i = 0; i < kDownsampleSteps; i++)
+		for (uint32_t i = 0; i < k_DownsampleSteps; i++)
 		{
 			desc.mWidth = (uint32_t)windowWidth >> (i + 1);
 			desc.mHeight = (uint32_t)windowHeight >> (i + 1);
@@ -1166,10 +1229,10 @@ bool AddRenderTargets()
 		loadDesc.pDesc = &desc;
 
 		::SyncToken texturesToken = NULL;
-		for (uint32_t i = 0; i < kUpsampleSteps; ++i)
+		for (uint32_t i = 0; i < k_UpsampleSteps; ++i)
 		{
-			desc.mWidth = (uint32_t)windowWidth >> (kUpsampleSteps - i);
-			desc.mHeight = (uint32_t)windowHeight >> (kUpsampleSteps - i);
+			desc.mWidth = (uint32_t)windowWidth >> (k_UpsampleSteps - i);
+			desc.mHeight = (uint32_t)windowHeight >> (k_UpsampleSteps - i);
 			loadDesc.ppTexture = &g_State->bloomUpsamples[i];
 			::addResource(&loadDesc, &texturesToken);
 		}
@@ -1185,12 +1248,12 @@ void RemoveRenderTargets()
 	::removeRenderTarget(g_State->renderer, g_State->depthBuffer);
 	::removeRenderTarget(g_State->renderer, g_State->sceneColor);
 
-	for (uint32_t i = 0; i < kDownsampleSteps; i++)
+	for (uint32_t i = 0; i < k_DownsampleSteps; i++)
 	{
 		::removeResource(g_State->bloomDownsamples[i]);
 	}
 
-	for (uint32_t i = 0; i < kUpsampleSteps; i++)
+	for (uint32_t i = 0; i < k_UpsampleSteps; i++)
 	{
 		::removeResource(g_State->bloomUpsamples[i]);
 	}
@@ -1253,7 +1316,7 @@ void AddDescriptorSets()
 	{
 		::DescriptorSetDesc desc = {};
 		desc.mIndex = ROOT_PARAM_PerFrame;
-		desc.mMaxSets = kDataBufferCount;
+		desc.mMaxSets = k_DataBufferCount;
 		desc.mNodeIndex = 0;
 		desc.mDescriptorCount = 1;
 		desc.pDescriptors = SRT_UberShaderData::PerFramePtr();
@@ -1274,7 +1337,7 @@ void AddDescriptorSets()
 	{
 		::DescriptorSetDesc desc = {};
 		desc.mIndex = ROOT_PARAM_PerDraw;
-		desc.mMaxSets = kDownsampleSteps;
+		desc.mMaxSets = k_DownsampleSteps;
 		desc.mNodeIndex = 0;
 		desc.mDescriptorCount = 3;
 		desc.pDescriptors = SRT_DownsampleData::PerDrawPtr();
@@ -1295,7 +1358,7 @@ void AddDescriptorSets()
 	{
 		::DescriptorSetDesc desc = {};
 		desc.mIndex = ROOT_PARAM_PerDraw;
-		desc.mMaxSets = kUpsampleSteps;
+		desc.mMaxSets = k_UpsampleSteps;
 		desc.mNodeIndex = 0;
 		desc.mDescriptorCount = 4;
 		desc.pDescriptors = SRT_UpsampleData::PerDrawPtr();
@@ -1316,7 +1379,7 @@ void AddDescriptorSets()
 	{
 		::DescriptorSetDesc desc = {};
 		desc.mIndex = ROOT_PARAM_PerFrame;
-		desc.mMaxSets = kDataBufferCount;
+		desc.mMaxSets = k_DataBufferCount;
 		desc.mNodeIndex = 0;
 		desc.mDescriptorCount = 3;
 		desc.pDescriptors = SRT_ToneMappingData::PerFramePtr();
@@ -1334,7 +1397,7 @@ void PrepareDescriptorSets()
 		updateDescriptorSet(g_State->renderer, 0, g_State->uberPersistentDescriptorSet, 1, uParams);
 	}
 
-	for (uint32_t i = 0; i < kDataBufferCount; ++i)
+	for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 	{
 		DescriptorData uParams[1] = {};
 		uParams[0].mIndex = (offsetof(SRT_UberShaderData::PerFrame, CB0)) / sizeof(::Descriptor);
@@ -1350,7 +1413,7 @@ void PrepareDescriptorSets()
 		updateDescriptorSet(g_State->renderer, 0, g_State->downsamplePersistentDescriptorSet, 1, uParams);
 	}
 
-	for (uint32_t i = 0; i < kDownsampleSteps; ++i)
+	for (uint32_t i = 0; i < k_DownsampleSteps; ++i)
 	{
 		DescriptorData uParams[3] = {};
 		uParams[0].mIndex = (offsetof(SRT_DownsampleData::PerDraw, CB0)) / sizeof(::Descriptor);
@@ -1375,17 +1438,17 @@ void PrepareDescriptorSets()
 		updateDescriptorSet(g_State->renderer, 0, g_State->upsamplePersistentDescriptorSet, 1, uParams);
 	}
 
-	for (uint32_t i = 0; i < kUpsampleSteps; ++i)
+	for (uint32_t i = 0; i < k_UpsampleSteps; ++i)
 	{
 		DescriptorData uParams[4] = {};
 		uParams[0].mIndex = (offsetof(SRT_UpsampleData::PerDraw, CB0)) / sizeof(::Descriptor);
 		uParams[0].ppBuffers = &g_State->upsampleUniformBuffers[i];
 		uParams[1].mIndex = (offsetof(SRT_UpsampleData::PerDraw, gSourceTexture)) / sizeof(::Descriptor);
-		uParams[1].ppTextures = &g_State->bloomDownsamples[kUpsampleSteps - (i + 1)];
+		uParams[1].ppTextures = &g_State->bloomDownsamples[k_UpsampleSteps - (i + 1)];
 		uParams[2].mIndex = (offsetof(SRT_UpsampleData::PerDraw, gPreviousTexture)) / sizeof(::Descriptor);
 		if (i == 0)
 		{
-			uParams[2].ppTextures = &g_State->bloomDownsamples[kDownsampleSteps - 1];
+			uParams[2].ppTextures = &g_State->bloomDownsamples[k_DownsampleSteps - 1];
 		}
 		else
 		{
@@ -1404,7 +1467,7 @@ void PrepareDescriptorSets()
 		updateDescriptorSet(g_State->renderer, 0, g_State->toneMappingPersistentDescriptorSet, 1, uParams);
 	}
 
-	for (uint32_t i = 0; i < kDataBufferCount; ++i)
+	for (uint32_t i = 0; i < k_DataBufferCount; ++i)
 	{
 		DescriptorData uParams[3] = {};
 		uParams[0].mIndex = (offsetof(SRT_ToneMappingData::PerFrame, gSceneColor)) / sizeof(::Descriptor);
@@ -1412,7 +1475,7 @@ void PrepareDescriptorSets()
 		uParams[1].mIndex = (offsetof(SRT_ToneMappingData::PerFrame, gTonyMcMapfaceLut)) / sizeof(::Descriptor);
 		uParams[1].ppTextures = &g_State->tonyMcMapfaceLUT;
 		uParams[2].mIndex = (offsetof(SRT_ToneMappingData::PerFrame, gBloomBuffer)) / sizeof(::Descriptor);
-		uParams[2].ppTextures = &g_State->bloomUpsamples[kUpsampleSteps - 1];
+		uParams[2].ppTextures = &g_State->bloomUpsamples[k_UpsampleSteps - 1];
 		updateDescriptorSet(g_State->renderer, i, g_State->toneMappingPerFrameDescriptorSet, 3, uParams);
 	}
 }
@@ -1529,10 +1592,10 @@ void AddGeometry()
 	ASSERT(g_State->geometry.indices);
 	memset(g_State->geometry.indices, 0, sizeof(uint32_t) * maxIndices);
 
-	g_State->meshes = (GPUMesh*)tf_malloc(sizeof(GPUMesh) * k_MaxMeshes);
+	g_State->meshes = (GPUMesh*)tf_malloc(sizeof(GPUMesh) * k_MeshesMaxCount);
 	ASSERT(g_State->meshes);
-	memset(g_State->meshes, 0, sizeof(GPUMesh) * k_MaxMeshes);
-	g_State->numMeshes = 0;
+	memset(g_State->meshes, 0, sizeof(GPUMesh) * k_MeshesMaxCount);
+	g_State->meshCount = 0;
 
 	GPUMesh* plane = &g_State->meshes[(size_t)Meshes::Plane];
 	const char* planePath = "Content/Models/Plane.obj";
@@ -1546,14 +1609,14 @@ void AddGeometry()
 	const char* helmetPath = "Content/Models/DamagedHelmet.obj";
 	LoadMesh(&g_State->geometry, helmetPath, helmet);
 
-	g_State->numMeshes = (uint32_t)Meshes::_Count;
+	g_State->meshCount = (uint32_t)Meshes::_Count;
 
 	{
 		::BufferLoadDesc meshDesc = {};
 		meshDesc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
 		meshDesc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 		meshDesc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-		meshDesc.mDesc.mSize = sizeof(GPUMesh) * k_MaxMeshes;
+		meshDesc.mDesc.mSize = sizeof(GPUMesh) * k_MeshesMaxCount;
 		meshDesc.mDesc.mElementCount = (uint32_t)(meshDesc.mDesc.mSize / sizeof(uint32_t));
 		meshDesc.mDesc.bBindless = true;
 		meshDesc.pData = g_State->meshes;
@@ -1565,7 +1628,7 @@ void AddGeometry()
 		vbDesc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_BUFFER_RAW;
 		vbDesc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
 		vbDesc.mDesc.mFlags = ::BUFFER_CREATION_FLAG_SHADER_DEVICE_ADDRESS;
-		vbDesc.mDesc.mSize = sizeof(MeshVertex) * g_State->geometry.numVertices;
+		vbDesc.mDesc.mSize = sizeof(MeshVertex) * g_State->geometry.vertexCount;
 		vbDesc.mDesc.mElementCount = (uint32_t)(vbDesc.mDesc.mSize / sizeof(uint32_t));
 		vbDesc.mDesc.bBindless = true;
 		vbDesc.pData = g_State->geometry.vertices;
@@ -1576,7 +1639,7 @@ void AddGeometry()
 		::BufferLoadDesc ibDesc = {};
 		ibDesc.mDesc.mDescriptors = ::DESCRIPTOR_TYPE_INDEX_BUFFER;
 		ibDesc.mDesc.mMemoryUsage = ::RESOURCE_MEMORY_USAGE_GPU_ONLY;
-		ibDesc.mDesc.mSize = sizeof(uint32_t) * g_State->geometry.numIndices;
+		ibDesc.mDesc.mSize = sizeof(uint32_t) * g_State->geometry.indexCount;
 		ibDesc.pData = g_State->geometry.indices;
 		ibDesc.ppBuffer = &g_State->indexBuffer;
 		::addResource(&ibDesc, NULL);
@@ -1679,8 +1742,8 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 	}
 
 	ASSERT(vertexOffset == indexCount);
-	k_ScratchGeometryData.geometry.numVertices = (uint32_t)indexCount;
-	k_ScratchGeometryData.geometry.numIndices = (uint32_t)indexCount;
+	k_ScratchGeometryData.geometry.vertexCount = (uint32_t)indexCount;
+	k_ScratchGeometryData.geometry.indexCount = (uint32_t)indexCount;
 
 	for (uint32_t i = 0; i < indexCount; ++i) {
 		k_ScratchGeometryData.geometry.indices[i] = (uint32_t)i;
@@ -1705,21 +1768,21 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 
 	// TODO: Regenerate the index buffer with meshoptimizer
 
-	for (uint32_t i = 0; i < k_ScratchGeometryData.geometry.numVertices; ++i)
+	for (uint32_t i = 0; i < k_ScratchGeometryData.geometry.vertexCount; ++i)
 	{
-		geometry->vertices[geometry->numVertices + i] = k_ScratchGeometryData.geometry.vertices[i];
+		geometry->vertices[geometry->vertexCount + i] = k_ScratchGeometryData.geometry.vertices[i];
 	}
 
-	for (uint32_t i = 0; i < k_ScratchGeometryData.geometry.numIndices; ++i) {
-		geometry->indices[geometry->numIndices + i] = k_ScratchGeometryData.geometry.indices[i];
+	for (uint32_t i = 0; i < k_ScratchGeometryData.geometry.indexCount; ++i) {
+		geometry->indices[geometry->indexCount + i] = k_ScratchGeometryData.geometry.indices[i];
 	}
 
-	mesh->indexOffset = geometry->numIndices;
-	mesh->vertexOffset = geometry->numVertices;
-	mesh->indexCount = k_ScratchGeometryData.geometry.numIndices;
+	mesh->indexOffset = geometry->indexCount;
+	mesh->vertexOffset = geometry->vertexCount;
+	mesh->indexCount = k_ScratchGeometryData.geometry.indexCount;
 
-	geometry->numVertices += k_ScratchGeometryData.geometry.numVertices;
-	geometry->numIndices += k_ScratchGeometryData.geometry.numIndices;
+	geometry->vertexCount += k_ScratchGeometryData.geometry.vertexCount;
+	geometry->indexCount += k_ScratchGeometryData.geometry.indexCount;
 
 	return;
 }
@@ -1732,26 +1795,26 @@ bool ScratchGeometryData::isInitialized()
 void ScratchGeometryData::initialize()
 {
 	if (isInitialized()) return;
-	ASSERT(maxVertices > 0);
-	ASSERT(maxIndices > 0);
+	ASSERT(verticesMaxCount > 0);
+	ASSERT(indicexMaxCount > 0);
 
-	geometry.vertices = (MeshVertex*)tf_malloc(sizeof(MeshVertex) * maxVertices);
-	geometry.indices = (uint32_t*)tf_malloc(sizeof(uint32_t) * maxIndices);
+	geometry.vertices = (MeshVertex*)tf_malloc(sizeof(MeshVertex) * verticesMaxCount);
+	geometry.indices = (uint32_t*)tf_malloc(sizeof(uint32_t) * indicexMaxCount);
 	reset();
 }
 
 void ScratchGeometryData::reset()
 {
-	ASSERT(maxVertices > 0);
-	ASSERT(maxIndices > 0);
+	ASSERT(verticesMaxCount > 0);
+	ASSERT(indicexMaxCount > 0);
 
 	ASSERT(geometry.vertices);
-	memset(geometry.vertices, 0, sizeof(MeshVertex) * maxVertices);
-	geometry.numVertices = 0;
+	memset(geometry.vertices, 0, sizeof(MeshVertex) * verticesMaxCount);
+	geometry.vertexCount = 0;
 
 	ASSERT(geometry.indices);
-	memset(geometry.indices, 0, sizeof(uint32_t) * maxIndices);
-	geometry.numIndices = 0;
+	memset(geometry.indices, 0, sizeof(uint32_t) * indicexMaxCount);
+	geometry.indexCount = 0;
 }
 
 void ScratchGeometryData::destroy()
@@ -1763,7 +1826,7 @@ void ScratchGeometryData::destroy()
 int32_t mikkt_GetNumFaces(const SMikkTSpaceContext* context)
 {
 	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
-	return (int32_t)geometry->numIndices / 3;
+	return (int32_t)geometry->indexCount / 3;
 }
 
 int32_t mikkt_GetNumVerticesOfFace(const SMikkTSpaceContext* context, int32_t faceIndex)
@@ -1779,10 +1842,10 @@ uint32_t mikkt_GetVertexIndex(const SMikkTSpaceContext* context, int32_t faceInd
 	RendererGeometry* geometry = (RendererGeometry*)context->m_pUserData;
 
 	uint32_t index = faceIndex * 3 + vertIndex;
-	ASSERT(index < geometry->numIndices);
+	ASSERT(index < geometry->indexCount);
 
 	uint32_t vertexIndex = geometry->indices[index];
-	ASSERT(vertexIndex < geometry->numVertices);
+	ASSERT(vertexIndex < geometry->vertexCount);
 
 	return vertexIndex;
 }

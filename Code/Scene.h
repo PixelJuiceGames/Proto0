@@ -16,12 +16,42 @@ struct PlayerCamera
 struct Player
 {
 	::float3 position;
+	::float3 scale;
 	float movementSpeed;
 	::float2 movementVector;
+};
+
+enum class LightType
+{
+	PointLight
+};
+
+struct Light
+{
+	LightType type;
+	::float3 position;
+	::float3 color;
+	float intensity;
+	float range;
+};
+
+struct Entity
+{
+	::float3 position;
+	::float3 scale;
+	uint32_t meshHandle;		// TMP
+	uint32_t materialHandle;	// TMP
 };
 
 struct Scene
 {
 	Player player;
 	PlayerCamera playerCamera;
+	Light playerLight;
+
+	Light* lights = NULL;
+	uint32_t lightCount = 0;
+
+	Entity* entities = NULL;
+	uint32_t entityCount = 0;
 };

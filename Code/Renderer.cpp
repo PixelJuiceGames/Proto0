@@ -84,6 +84,18 @@ struct RendererState
 	::GpuCmdRing graphicsCmdRing = {};
 	::SwapChain* swapChain = NULL;
 	::Semaphore* imageAcquiredSemaphore = NULL;
+	// R8G8B8A8_UNORM
+	// RGB: Base color, A: unused
+	::RenderTarget* gbuffer0 = NULL;
+	// R16G16B16A16_FLOAT
+	// RGB: World Space Normal, A: unused
+	::RenderTarget* gbuffer1 = NULL;
+	// R8G8B8A8_UNORM
+	// R: Occlusion, G: Roughness, B: Metalness, A: Unused
+	::RenderTarget* gbuffer2 = NULL;
+	// R16G16B16A16_FLOAT
+	// RGB: Emissions, A: unused
+	::RenderTarget* gbuffer3 = NULL;
 	::RenderTarget* sceneColor = NULL;
 	::RenderTarget* depthBuffer = NULL;
 
@@ -121,6 +133,15 @@ struct RendererState
 	// UberShader
 	::Shader* uberShader = NULL;
 	::Pipeline* uberPipeline = NULL;
+	// NOTE: This is the data of a specific material
+	::DescriptorSet* uberPersistentDescriptorSet = NULL;
+	::DescriptorSet* uberPerFrameDescriptorSet = NULL;
+
+	// Deferred Sahding
+	::Shader* deferredShadingShader = NULL;
+	::Pipeline* deferredShadingPipeline = NULL;
+	::DescriptorSet* deferredShadingPersistentDescriptorSet = NULL;
+	::DescriptorSet* deferredShadingPerFrameDescriptorSet = NULL;
 
 	// Downsampling
 	::Shader* downsampleShader = NULL;
@@ -143,10 +164,6 @@ struct RendererState
 
 	::Sampler* linearRepeatSampler = NULL;
 	::Sampler* linearClampSampler = NULL;
-
-	// NOTE: This is the data of a specific material
-	::DescriptorSet* uberPersistentDescriptorSet = NULL;
-	::DescriptorSet* uberPerFrameDescriptorSet = NULL;
 
 	// TODO(gmodarelli): Use a pool to store pointers to textures
 	::Texture* damagedHelmetAlbedoTexture = NULL;
@@ -806,31 +823,9 @@ namespace renderer
 		::Cmd* cmd = elem.pCmds[0];
 		::beginCmd(cmd);
 
-		// Forward Pass
+		// TODO: Move to a separate function
+		// Update GPU data
 		{
-			// Resource Barriers
-			{
-				::RenderTargetBarrier rtBarriers[] = {
-					{ g_State->sceneColor, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_RENDER_TARGET },
-				};
-				::cmdResourceBarrier(cmd, 0, NULL, 0, NULL, TF_ARRAY_COUNT(rtBarriers), rtBarriers);
-			}
-
-			// Binding Render Targets
-			{
-				BindRenderTargetsDesc bindRenderTargets = {};
-				bindRenderTargets.mRenderTargetCount = 1;
-				bindRenderTargets.mRenderTargets[0] = {};
-				bindRenderTargets.mRenderTargets[0].pRenderTarget = g_State->sceneColor;
-				bindRenderTargets.mRenderTargets[0].mLoadAction = ::LOAD_ACTION_CLEAR;
-				bindRenderTargets.mDepthStencil.mLoadAction = ::LOAD_ACTION_CLEAR;
-				bindRenderTargets.mDepthStencil.pDepthStencil = g_State->depthBuffer;
-				::cmdBindRenderTargets(cmd, &bindRenderTargets);
-			}
-
-			::cmdSetViewport(cmd, 0.0f, 0.0f, (float)windowWidth, (float)windowHeight, 0.0f, 1.0f);
-			::cmdSetScissor(cmd, 0, 0, (uint32_t)windowWidth, (uint32_t)windowHeight);
-
 			// Update Transforms
 			// NOTE(gmodarelli): We should split the instance buffer in dynamic and static.
 			// For now we're just updating the player transform, since it's the only dynamic instance
@@ -842,9 +837,9 @@ namespace renderer
 					scene->player.position.x,
 					scene->player.position.y,
 					scene->player.position.z,
-				});
+					});
 				::mat4 scale = ::mat4::scale({ scene->player.scale.x, scene->player.scale.y, scene->player.scale.z });
-				loadMat4(translate * scale, &instance.worldMat.m[0]);
+				loadMat4(translate* scale, &instance.worldMat.m[0]);
 				instance.meshIndex = meshIndex;
 				instance.materialBufferIndex = 0;
 			}
@@ -898,35 +893,112 @@ namespace renderer
 				}
 			}
 
+			::mat4 projMat = ::mat4::perspectiveRH(1.0471f, windowHeight / (float)windowWidth, 100.0f, 0.01f);
+			::mat4 projViewMat = projMat * scene->playerCamera.viewMatrix; 
+			::mat4 invProjViewMat = ::inverse(projViewMat);
+			Frame frameData = {};
+			loadMat4(projViewMat, &frameData.projViewMat.m[0]);
+			loadMat4(invProjViewMat, &frameData.invProjViewMat.m[0]);
+			frameData.sunColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+			frameData.sunDirection = { 0.0f, 0.0f, 0.0f, 0.0f };
+			frameData.cameraPosition = { scene->playerCamera.position.x, scene->playerCamera.position.y, scene->playerCamera.position.z, 1.0f };
+			frameData.meshBufferIndex = (uint32_t)g_State->meshesBuffer->mDx.mDescriptors;
+			frameData.vertexBufferIndex = (uint32_t)g_State->vertexBuffer->mDx.mDescriptors;
+			frameData.materialBufferIndex = (uint32_t)g_State->materialBuffers[g_State->frameIndex]->mDx.mDescriptors;
+			frameData.instanceBufferIndex = (uint32_t)g_State->instanceBuffers[g_State->frameIndex]->mDx.mDescriptors;
+			frameData.lightBufferIndex = (uint32_t)g_State->lightBuffers[g_State->frameIndex]->mDx.mDescriptors;
+			frameData.numLights = g_State->lightsCount;
+
+			::BufferUpdateDesc desc = { g_State->frameUniformBuffers[g_State->frameIndex] };
+			::beginUpdateResource(&desc);
+			memcpy(desc.pMappedData, &frameData, sizeof(frameData));
+			::endUpdateResource(&desc);
+		}
+
+		// Geometry Pass
+		{
+			// Resource Barriers
+			{
+				::RenderTargetBarrier rtBarriers[] = {
+					{ g_State->gbuffer0, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_RENDER_TARGET },
+					{ g_State->gbuffer1, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_RENDER_TARGET },
+					{ g_State->gbuffer2, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_RENDER_TARGET },
+					{ g_State->gbuffer3, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_RENDER_TARGET },
+					{ g_State->depthBuffer, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_DEPTH_WRITE }
+				};
+				::cmdResourceBarrier(cmd, 0, NULL, 0, NULL, TF_ARRAY_COUNT(rtBarriers), rtBarriers);
+			}
+
+			// Binding Render Targets
+			{
+				BindRenderTargetsDesc bindRenderTargets = {};
+				bindRenderTargets.mRenderTargetCount = 4;
+				bindRenderTargets.mRenderTargets[0] = {};
+				bindRenderTargets.mRenderTargets[0].pRenderTarget = g_State->gbuffer0;
+				bindRenderTargets.mRenderTargets[0].mLoadAction = ::LOAD_ACTION_CLEAR;
+				bindRenderTargets.mRenderTargets[1] = {};
+				bindRenderTargets.mRenderTargets[1].pRenderTarget = g_State->gbuffer1;
+				bindRenderTargets.mRenderTargets[1].mLoadAction = ::LOAD_ACTION_CLEAR;
+				bindRenderTargets.mRenderTargets[2] = {};
+				bindRenderTargets.mRenderTargets[2].pRenderTarget = g_State->gbuffer2;
+				bindRenderTargets.mRenderTargets[2].mLoadAction = ::LOAD_ACTION_CLEAR;
+				bindRenderTargets.mRenderTargets[3] = {};
+				bindRenderTargets.mRenderTargets[3].pRenderTarget = g_State->gbuffer3;
+				bindRenderTargets.mRenderTargets[3].mLoadAction = ::LOAD_ACTION_CLEAR;
+				bindRenderTargets.mDepthStencil.mLoadAction = ::LOAD_ACTION_CLEAR;
+				bindRenderTargets.mDepthStencil.pDepthStencil = g_State->depthBuffer;
+				::cmdBindRenderTargets(cmd, &bindRenderTargets);
+			}
+
+			::cmdSetViewport(cmd, 0.0f, 0.0f, (float)windowWidth, (float)windowHeight, 0.0f, 1.0f);
+			::cmdSetScissor(cmd, 0, 0, (uint32_t)windowWidth, (uint32_t)windowHeight);
+
+
 			// Render meshes
 			{
-				::mat4 projMat = ::mat4::perspectiveRH(1.0471f, windowHeight / (float)windowWidth, 100.0f, 0.01f);
-				::mat4 projViewMat = projMat * scene->playerCamera.viewMatrix;
-				Frame frameData = {};
-				loadMat4(projViewMat, &frameData.projViewMat.m[0]);
-				frameData.sunColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-				frameData.sunDirection = { 0.0f, 0.0f, 0.0f, 0.0f };
-				frameData.meshBufferIndex = (uint32_t)g_State->meshesBuffer->mDx.mDescriptors;
-				frameData.vertexBufferIndex = (uint32_t)g_State->vertexBuffer->mDx.mDescriptors;
-				frameData.materialBufferIndex = (uint32_t)g_State->materialBuffers[g_State->frameIndex]->mDx.mDescriptors;
-				frameData.instanceBufferIndex = (uint32_t)g_State->instanceBuffers[g_State->frameIndex]->mDx.mDescriptors;
-				frameData.lightBufferIndex = (uint32_t)g_State->lightBuffers[g_State->frameIndex]->mDx.mDescriptors;
-				frameData.numLights = g_State->lightsCount;
-
-				::BufferUpdateDesc desc = { g_State->frameUniformBuffers[g_State->frameIndex] };
-				::beginUpdateResource(&desc);
-				memcpy(desc.pMappedData, &frameData, sizeof(frameData));
-				::endUpdateResource(&desc);
-
 				::cmdBindPipeline(cmd, g_State->uberPipeline);
 				::cmdBindDescriptorSet(cmd, 0, g_State->uberPersistentDescriptorSet);
 				::cmdBindDescriptorSet(cmd, g_State->frameIndex, g_State->uberPerFrameDescriptorSet);
 				::cmdBindIndexBuffer(cmd, g_State->indexBuffer, ::INDEX_TYPE_UINT32, 0);
 
-				::cmdExecuteIndirect(cmd, ::INDIRECT_DRAW_INDEX, 2, g_State->indirectDrawBuffers[g_State->frameIndex], 0, NULL, 0);
+				::cmdExecuteIndirect(cmd, ::INDIRECT_DRAW_INDEX, g_State->indirectDrawCommandCount, g_State->indirectDrawBuffers[g_State->frameIndex], 0, NULL, 0);
 			}
 
 			::cmdBindRenderTargets(cmd, NULL);
+		}
+
+		// Deferred Shading
+		{
+			// Resource Barriers
+			{
+				::RenderTargetBarrier rtBarriers[] = {
+					{ g_State->gbuffer0, ::RESOURCE_STATE_RENDER_TARGET, ::RESOURCE_STATE_SHADER_RESOURCE },
+					{ g_State->gbuffer1, ::RESOURCE_STATE_RENDER_TARGET, ::RESOURCE_STATE_SHADER_RESOURCE },
+					{ g_State->gbuffer2, ::RESOURCE_STATE_RENDER_TARGET, ::RESOURCE_STATE_SHADER_RESOURCE },
+					{ g_State->gbuffer3, ::RESOURCE_STATE_RENDER_TARGET, ::RESOURCE_STATE_SHADER_RESOURCE },
+					{ g_State->depthBuffer, ::RESOURCE_STATE_DEPTH_WRITE, ::RESOURCE_STATE_SHADER_RESOURCE },
+					{ g_State->sceneColor, ::RESOURCE_STATE_SHADER_RESOURCE, ::RESOURCE_STATE_RENDER_TARGET },
+				};
+				::cmdResourceBarrier(cmd, 0, NULL, 0, NULL, TF_ARRAY_COUNT(rtBarriers), rtBarriers);
+			}
+
+			// Binding Render Targets
+			{
+				BindRenderTargetsDesc bindRenderTargets = {};
+				bindRenderTargets.mRenderTargetCount = 1;
+				bindRenderTargets.mRenderTargets[0] = {};
+				bindRenderTargets.mRenderTargets[0].pRenderTarget = g_State->sceneColor;
+				bindRenderTargets.mRenderTargets[0].mLoadAction = ::LOAD_ACTION_CLEAR;
+				::cmdBindRenderTargets(cmd, &bindRenderTargets);
+			}
+
+			::cmdSetViewport(cmd, 0.0f, 0.0f, (float)windowWidth, (float)windowHeight, 0.0f, 1.0f);
+			::cmdSetScissor(cmd, 0, 0, (uint32_t)windowWidth, (uint32_t)windowHeight);
+
+			::cmdBindPipeline(cmd, g_State->deferredShadingPipeline);
+			::cmdBindDescriptorSet(cmd, 0, g_State->deferredShadingPersistentDescriptorSet);
+			::cmdBindDescriptorSet(cmd, g_State->frameIndex, g_State->deferredShadingPerFrameDescriptorSet);
+			::cmdDraw(cmd, 3, 0);
 		}
 
 		// Bloom
@@ -1151,7 +1223,7 @@ bool AddRenderTargets()
 		desc.mClearValue.depth = 0.0f;
 		desc.mClearValue.stencil = 0;
 		desc.mFormat = ::TinyImageFormat_D32_SFLOAT;
-		desc.mStartState = ::RESOURCE_STATE_DEPTH_WRITE;
+		desc.mStartState = ::RESOURCE_STATE_SHADER_RESOURCE;
 		desc.mSampleCount = ::SAMPLE_COUNT_1;
 		desc.mSampleQuality = 0;
 		desc.mFlags = ::TEXTURE_CREATION_FLAG_ON_TILE;
@@ -1182,6 +1254,64 @@ bool AddRenderTargets()
 		if (!g_State->sceneColor)
 		{
 			LOGF(eERROR, "Failed to create the scene color buffer");
+			return false;
+		}
+	}
+
+	// GBuffer
+	{
+		::RenderTargetDesc desc = {};
+		desc.mWidth = (uint32_t)windowWidth;
+		desc.mHeight = (uint32_t)windowHeight;
+		desc.mDepth = 1;
+		desc.mArraySize = 1;
+		desc.mClearValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+		desc.mStartState = ::RESOURCE_STATE_SHADER_RESOURCE;
+		desc.mSampleCount = ::SAMPLE_COUNT_1;
+		desc.mSampleQuality = 0;
+		desc.mFlags = ::TEXTURE_CREATION_FLAG_ON_TILE;
+
+		// GBuffer 0
+		desc.mFormat = ::TinyImageFormat_R8G8B8A8_SRGB;
+		desc.pName = "GBuffer 0";
+		::addRenderTarget(g_State->renderer, &desc, &g_State->gbuffer0);
+
+		if (!g_State->gbuffer0)
+		{
+			LOGF(eERROR, "Failed to create the gbuffer 0");
+			return false;
+		}
+
+		// GBuffer 1
+		desc.mFormat = ::TinyImageFormat_R16G16B16A16_SFLOAT;
+		desc.pName = "GBuffer 1";
+		::addRenderTarget(g_State->renderer, &desc, &g_State->gbuffer1);
+
+		if (!g_State->gbuffer1)
+		{
+			LOGF(eERROR, "Failed to create the gbuffer 1");
+			return false;
+		}
+
+		// GBuffer 2
+		desc.mFormat = ::TinyImageFormat_R8G8B8A8_UNORM;
+		desc.pName = "GBuffer 2";
+		::addRenderTarget(g_State->renderer, &desc, &g_State->gbuffer2);
+
+		if (!g_State->gbuffer2)
+		{
+			LOGF(eERROR, "Failed to create the gbuffer 2");
+			return false;
+		}
+
+		// GBuffer 3
+		desc.mFormat = ::TinyImageFormat_R16G16B16A16_SFLOAT;
+		desc.pName = "GBuffer 3";
+		::addRenderTarget(g_State->renderer, &desc, &g_State->gbuffer3);
+
+		if (!g_State->gbuffer3)
+		{
+			LOGF(eERROR, "Failed to create the gbuffer 3");
 			return false;
 		}
 	}
@@ -1247,6 +1377,10 @@ void RemoveRenderTargets()
 {
 	::removeRenderTarget(g_State->renderer, g_State->depthBuffer);
 	::removeRenderTarget(g_State->renderer, g_State->sceneColor);
+	::removeRenderTarget(g_State->renderer, g_State->gbuffer0);
+	::removeRenderTarget(g_State->renderer, g_State->gbuffer1);
+	::removeRenderTarget(g_State->renderer, g_State->gbuffer2);
+	::removeRenderTarget(g_State->renderer, g_State->gbuffer3);
 
 	for (uint32_t i = 0; i < k_DownsampleSteps; i++)
 	{
@@ -1267,6 +1401,15 @@ void AddShaders()
 		uberShader.mVert.pFileName = "Uber.vert";
 		uberShader.mFrag.pFileName = "Uber.pixel";
 		::addShader(g_State->renderer, &uberShader, &g_State->uberShader);
+	}
+
+	// TODO: Switch to a compute shader/pipeline
+	// Deferred Shading
+	{
+		ShaderLoadDesc uberShader = {};
+		uberShader.mVert.pFileName = "FullscreenTriangle.vert";
+		uberShader.mFrag.pFileName = "DeferredShading.pixel";
+		::addShader(g_State->renderer, &uberShader, &g_State->deferredShadingShader);
 	}
 
 	// Downsample Shader
@@ -1295,6 +1438,7 @@ void AddShaders()
 void RemoveShaders()
 {
 	::removeShader(g_State->renderer, g_State->uberShader);
+	::removeShader(g_State->renderer, g_State->deferredShadingShader);
 	::removeShader(g_State->renderer, g_State->downsampleShader);
 	::removeShader(g_State->renderer, g_State->upsampleShader);
 	::removeShader(g_State->renderer, g_State->toneMapping);
@@ -1321,6 +1465,27 @@ void AddDescriptorSets()
 		desc.mDescriptorCount = 1;
 		desc.pDescriptors = SRT_UberShaderData::PerFramePtr();
 		::addDescriptorSet(g_State->renderer, &desc, &g_State->uberPerFrameDescriptorSet);
+	}
+
+	// Deferred Shading Shader Descriptor Sets
+	{
+		::DescriptorSetDesc desc = {};
+		desc.mIndex = ROOT_PARAM_Persistent_SAMPLER;
+		desc.mMaxSets = 1;
+		desc.mNodeIndex = 0;
+		desc.mDescriptorCount = 1;
+		desc.pDescriptors = SRT_DeferredShadingShaderData::PersistentPtr();
+		::addDescriptorSet(g_State->renderer, &desc, &g_State->deferredShadingPersistentDescriptorSet);
+	}
+
+	{
+		::DescriptorSetDesc desc = {};
+		desc.mIndex = ROOT_PARAM_PerFrame;
+		desc.mMaxSets = k_DataBufferCount;
+		desc.mNodeIndex = 0;
+		desc.mDescriptorCount = 6;
+		desc.pDescriptors = SRT_DeferredShadingShaderData::PerFramePtr();
+		::addDescriptorSet(g_State->renderer, &desc, &g_State->deferredShadingPerFrameDescriptorSet);
 	}
 
 	// Downsample Descriptor Sets
@@ -1405,6 +1570,32 @@ void PrepareDescriptorSets()
 		updateDescriptorSet(g_State->renderer, i, g_State->uberPerFrameDescriptorSet, 1, uParams);
 	}
 
+	// Deferred Shading Shader Descriptor Sets
+	{
+		DescriptorData uParams[1] = {};
+		uParams[0].mIndex = (offsetof(SRT_DeferredShadingShaderData::Persistent, gLinearClampSampler)) / sizeof(::Descriptor);
+		uParams[0].ppSamplers = &g_State->linearClampSampler;
+		updateDescriptorSet(g_State->renderer, 0, g_State->deferredShadingPersistentDescriptorSet, 1, uParams);
+	}
+
+	for (uint32_t i = 0; i < k_DataBufferCount; ++i)
+	{
+		DescriptorData uParams[6] = {};
+		uParams[0].mIndex = (offsetof(SRT_DeferredShadingShaderData::PerFrame, CB0)) / sizeof(::Descriptor);
+		uParams[0].ppBuffers = &g_State->frameUniformBuffers[i];
+		uParams[1].mIndex = (offsetof(SRT_DeferredShadingShaderData::PerFrame, gGBuffer0)) / sizeof(::Descriptor);
+		uParams[1].ppTextures = &g_State->gbuffer0->pTexture;
+		uParams[2].mIndex = (offsetof(SRT_DeferredShadingShaderData::PerFrame, gGBuffer1)) / sizeof(::Descriptor);
+		uParams[2].ppTextures = &g_State->gbuffer1->pTexture;
+		uParams[3].mIndex = (offsetof(SRT_DeferredShadingShaderData::PerFrame, gGBuffer2)) / sizeof(::Descriptor);
+		uParams[3].ppTextures = &g_State->gbuffer2->pTexture;
+		uParams[4].mIndex = (offsetof(SRT_DeferredShadingShaderData::PerFrame, gGBuffer3)) / sizeof(::Descriptor);
+		uParams[4].ppTextures = &g_State->gbuffer3->pTexture;
+		uParams[5].mIndex = (offsetof(SRT_DeferredShadingShaderData::PerFrame, gDepthBuffer)) / sizeof(::Descriptor);
+		uParams[5].ppTextures = &g_State->depthBuffer->pTexture;
+		updateDescriptorSet(g_State->renderer, i, g_State->deferredShadingPerFrameDescriptorSet, TF_ARRAY_COUNT(uParams), uParams);
+	}
+
 	// Downsample Descriptor Sets
 	{
 		DescriptorData uParams[1] = {};
@@ -1484,6 +1675,8 @@ void RemoveDescriptorSets()
 {
 	::removeDescriptorSet(g_State->renderer, g_State->uberPersistentDescriptorSet);
 	::removeDescriptorSet(g_State->renderer, g_State->uberPerFrameDescriptorSet);
+	::removeDescriptorSet(g_State->renderer, g_State->deferredShadingPersistentDescriptorSet);
+	::removeDescriptorSet(g_State->renderer, g_State->deferredShadingPerFrameDescriptorSet);
 	::removeDescriptorSet(g_State->renderer, g_State->downsamplePersistentDescriptorSet);
 	::removeDescriptorSet(g_State->renderer, g_State->downsamplePerDrawDescriptorSet);
 	::removeDescriptorSet(g_State->renderer, g_State->upsamplePersistentDescriptorSet);
@@ -1505,15 +1698,20 @@ void AddPipelines()
 		depthStateDesc.mDepthWrite = true;
 		depthStateDesc.mDepthFunc = ::CMP_GEQUAL;
 
-		::TinyImageFormat colorFormats = { ::TinyImageFormat_R16G16B16A16_SFLOAT };
+		::TinyImageFormat colorFormats[] = {
+			g_State->gbuffer0->mFormat,
+			g_State->gbuffer1->mFormat,
+			g_State->gbuffer2->mFormat,
+			g_State->gbuffer3->mFormat,
+		};
 
 		::PipelineDesc desc = {};
 		desc.mType = ::PIPELINE_TYPE_GRAPHICS;
 		::GraphicsPipelineDesc& pipelineSettings = desc.mGraphicsDesc;
 		pipelineSettings.mPrimitiveTopo = ::PRIMITIVE_TOPO_TRI_LIST;
-		pipelineSettings.mRenderTargetCount = 1;
+		pipelineSettings.mRenderTargetCount = TF_ARRAY_COUNT(colorFormats);
+		pipelineSettings.pColorFormats = colorFormats;
 		pipelineSettings.pDepthState = &depthStateDesc;
-		pipelineSettings.pColorFormats = &colorFormats;
 		pipelineSettings.mSampleCount = ::SAMPLE_COUNT_1;
 		pipelineSettings.mSampleQuality = 0;
 		pipelineSettings.mDepthStencilFormat = g_State->depthBuffer->mFormat;
@@ -1522,6 +1720,31 @@ void AddPipelines()
 		pipelineSettings.pRasterizerState = &rasterizerStateDesc;
 		pipelineSettings.mVRFoveatedRendering = false;
 		::addPipeline(g_State->renderer, &desc, &g_State->uberPipeline);
+	}
+
+	// Deferred Shading Shader Pipeline
+	{
+		::RasterizerStateDesc rasterizerStateDesc = {};
+		rasterizerStateDesc.mCullMode = ::CULL_MODE_NONE;
+
+		::DepthStateDesc depthStateDesc = {};
+		depthStateDesc.mDepthTest = false;
+		depthStateDesc.mDepthWrite = false;
+
+		::PipelineDesc desc = {};
+		desc.mType = ::PIPELINE_TYPE_GRAPHICS;
+		::GraphicsPipelineDesc& pipelineSettings = desc.mGraphicsDesc;
+		pipelineSettings.mPrimitiveTopo = ::PRIMITIVE_TOPO_TRI_LIST;
+		pipelineSettings.mRenderTargetCount = 1;
+		pipelineSettings.pDepthState = &depthStateDesc;
+		pipelineSettings.pColorFormats = &g_State->sceneColor->mFormat;
+		pipelineSettings.mSampleCount = g_State->sceneColor->mSampleCount;
+		pipelineSettings.mSampleQuality = g_State->sceneColor->mSampleQuality;
+		pipelineSettings.pShaderProgram = g_State->deferredShadingShader;
+		pipelineSettings.pVertexLayout = NULL;
+		pipelineSettings.pRasterizerState = &rasterizerStateDesc;
+		pipelineSettings.mVRFoveatedRendering = false;
+		::addPipeline(g_State->renderer, &desc, &g_State->deferredShadingPipeline);
 	}
 
 	// Downsample Pipeline
@@ -1574,6 +1797,7 @@ void AddPipelines()
 void RemovePipelines()
 {
 	::removePipeline(g_State->renderer, g_State->uberPipeline);
+	::removePipeline(g_State->renderer, g_State->deferredShadingPipeline);
 	::removePipeline(g_State->renderer, g_State->downsamplePipeline);
 	::removePipeline(g_State->renderer, g_State->upsamplePipeline);
 	::removePipeline(g_State->renderer, g_State->toneMappingPipeline);

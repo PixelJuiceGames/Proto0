@@ -172,6 +172,7 @@ struct GPULight
 struct Frame
 {
 	float4x4 projViewMat;
+    float4x4 invProjViewMat;
     float4 cameraPosition;
     float4 sunDirection;
     float4 sunColor;
@@ -199,6 +200,14 @@ bool HasValidTexture(uint textureBindlessIndex)
 {
     return textureBindlessIndex != INVALID_BINDLESS_INDEX;
 }
+
+struct GBufferOutput
+{
+    float4 GBuffer0 : SV_Target0;
+    float4 GBuffer1 : SV_Target1;
+    float4 GBuffer2 : SV_Target2;
+    float4 GBuffer3 : SV_Target3;
+};
 #endif
 
 #endif // _SHADER_GLOBALS

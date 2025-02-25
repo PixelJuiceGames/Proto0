@@ -82,6 +82,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 				entity.materialHandle = 1; // grid debug material
 			}
 		}
+
+		// Debug Damaged Helmet
+		{
+			Entity& entity = as->scene.entities[as->scene.entityCount++];
+			entity.position = { -10.0f, -10.0f, 1.0f };
+			entity.scale = { 1.0f, 1.0f, 1.0f };
+			entity.meshHandle = 2; // damaged helmet
+			entity.materialHandle = 2; // grid debug material
+		}
 	}
 
 	as->window = SDL_CreateWindow("Prototype 0", 1920, 1080, SDL_WINDOW_RESIZABLE);

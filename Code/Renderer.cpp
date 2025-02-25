@@ -1938,6 +1938,8 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 
 	size_t vertexOffset = 0;
 	size_t indexOffset = 0;
+	mesh->aabbMin = {  FLT_MAX,  FLT_MAX,  FLT_MAX };
+	mesh->aabbMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
 	for (uint32_t i = 0; i < obj->face_count; ++i)
 	{
@@ -1963,6 +1965,13 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 			v->tangent.z = 0;
 			v->tangent.y = 0;
 			v->tangent.w = 0;
+
+			mesh->aabbMin.x = TF_MIN(mesh->aabbMin.x, v->position.x);
+			mesh->aabbMin.y = TF_MIN(mesh->aabbMin.y, v->position.y);
+			mesh->aabbMin.z = TF_MIN(mesh->aabbMin.z, v->position.z);
+			mesh->aabbMax.x = TF_MAX(mesh->aabbMax.x, v->position.x);
+			mesh->aabbMax.y = TF_MAX(mesh->aabbMax.y, v->position.y);
+			mesh->aabbMax.z = TF_MAX(mesh->aabbMax.z, v->position.z);
 		}
 
 		indexOffset += obj->face_vertices[i];

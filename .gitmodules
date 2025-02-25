@@ -10,3 +10,6 @@
 [submodule "3rdparty/MikkTSpace"]
 	path = 3rdparty/MikkTSpace
 	url = git@github.com:PixelJuiceGames/MikkTSpace.git
+[submodule "3rdparty/meshoptimizer"]
+	path = 3rdparty/meshoptimizer
+	url = git@github.com:zeux/meshoptimizer.git

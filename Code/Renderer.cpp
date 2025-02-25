@@ -8,6 +8,9 @@
 #define FAST_OBJ_IMPLEMENTATION
 #include <fast_obj.h>
 
+// meshoptimizer
+#include <meshoptimizer.h>
+
 // MikkTSpace
 
 #include <mikktspace.h>
@@ -1969,6 +1972,7 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 	k_ScratchGeometryData.geometry.vertexCount = (uint32_t)indexCount;
 	k_ScratchGeometryData.geometry.indexCount = (uint32_t)indexCount;
 
+
 	for (uint32_t i = 0; i < indexCount; ++i) {
 		k_ScratchGeometryData.geometry.indices[i] = (uint32_t)i;
 	}
@@ -1990,23 +1994,37 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 
 	fast_obj_destroy(obj);
 
-	// TODO: Regenerate the index buffer with meshoptimizer
-
-	for (uint32_t i = 0; i < k_ScratchGeometryData.geometry.vertexCount; ++i)
-	{
-		geometry->vertices[geometry->vertexCount + i] = k_ScratchGeometryData.geometry.vertices[i];
-	}
-
-	for (uint32_t i = 0; i < k_ScratchGeometryData.geometry.indexCount; ++i) {
-		geometry->indices[geometry->indexCount + i] = k_ScratchGeometryData.geometry.indices[i];
-	}
-
 	mesh->indexOffset = geometry->indexCount;
 	mesh->vertexOffset = geometry->vertexCount;
-	mesh->indexCount = k_ScratchGeometryData.geometry.indexCount;
 
-	geometry->vertexCount += k_ScratchGeometryData.geometry.vertexCount;
-	geometry->indexCount += k_ScratchGeometryData.geometry.indexCount;
+	// Generate the index buffer with meshoptimizer
+	{
+		uint32_t* remap = (uint32_t*)tf_malloc(sizeof(uint32_t) * k_ScratchGeometryData.geometry.vertexCount);
+		size_t vertexCount = meshopt_generateVertexRemap(remap,
+			k_ScratchGeometryData.geometry.indices, 
+			k_ScratchGeometryData.geometry.indexCount,
+			k_ScratchGeometryData.geometry.vertices,
+			k_ScratchGeometryData.geometry.vertexCount,
+			sizeof(MeshVertex));
+
+		meshopt_remapIndexBuffer(&geometry->indices[geometry->indexCount],
+			k_ScratchGeometryData.geometry.indices,
+			k_ScratchGeometryData.geometry.indexCount,
+			remap);
+
+		geometry->indexCount += indexCount;
+
+		meshopt_remapVertexBuffer(&geometry->vertices[geometry->vertexCount],
+			k_ScratchGeometryData.geometry.vertices,
+			k_ScratchGeometryData.geometry.vertexCount,
+			sizeof(MeshVertex),
+			remap);
+
+		geometry->vertexCount += vertexCount;
+		mesh->indexCount = indexCount;
+
+		tf_free(remap);
+	}
 
 	return;
 }

@@ -18,6 +18,7 @@
 // The-Forge
 
 #include <Graphics/Interfaces/IGraphics.h>
+#include <Graphics/Interfaces/IRay.h>
 #include <Utilities/Interfaces/IFileSystem.h>
 #include <Utilities/Interfaces/ILog.h>
 #include <Utilities/Interfaces/IMemory.h>
@@ -45,6 +46,12 @@ const uint32_t k_MeshesMaxCount = 1024;
 const uint32_t k_InstancesMaxCount = 1024 * 1024;
 const uint32_t k_IndirectDrawCommandsMaxCount = 1024;
 
+enum class RaytracingTechnique
+{
+	RAY_QUERY = 0,
+	_COUNT,
+};
+
 enum class Meshes
 {
 	Plane = 0,
@@ -62,6 +69,7 @@ struct RendererGeometry
 	uint32_t vertexCount = 0;
 	uint32_t indexCount = 0;
 };
+
 struct ScratchGeometryData
 {
 	RendererGeometry geometry = {};
@@ -83,6 +91,10 @@ struct RendererState
 	uint32_t frameIndex = 0;
 
 	::Renderer* renderer = NULL;
+	::Raytracing* raytracing = NULL;
+
+	bool raytracingTechniqueSupported[(uint32_t)RaytracingTechnique::_COUNT] = {};
+
 	::Queue* graphicsQueue = NULL;
 	::GpuCmdRing graphicsCmdRing = {};
 	::SwapChain* swapChain = NULL;
@@ -111,6 +123,9 @@ struct RendererState
 	::Buffer* meshesBuffer = NULL;
 	::Buffer* vertexBuffer = NULL;
 	::Buffer* indexBuffer = NULL;
+
+	::AccelerationStructure* blas = NULL;
+	::AccelerationStructure* tlas = NULL;
 
 	::Buffer* frameUniformBuffers[k_DataBufferCount] = { NULL };
 	::Buffer* instanceBuffers[k_DataBufferCount] = { NULL };
@@ -244,6 +259,18 @@ namespace renderer
 			}
 
 			::setupGPUConfigurationPlatformParameters(g_State->renderer, desc.pExtendedSettings);
+		}
+		
+		// Initialize RayTracing
+		{
+			::initRaytracing(g_State->renderer, &g_State->raytracing);
+			g_State->raytracingTechniqueSupported[(uint32_t)RaytracingTechnique::RAY_QUERY] = g_State->renderer->pGpu->mRayQuerySupported;
+
+			if (!g_State->raytracingTechniqueSupported[(uint32_t)RaytracingTechnique::RAY_QUERY])
+			{
+				LOGF(eERROR, "GPU doesn't support hardware raytracing");
+				return false;
+			}
 		}
 
 		// Initialize Graphics Queue
@@ -545,6 +572,55 @@ namespace renderer
 
 		::waitForAllResourceLoads();
 
+		// BLAS creation
+		{
+			::AccelerationStructureDesc desc = {};
+			::AccelerationStructureGeometryDesc geometryDesc[k_MeshesMaxCount] = {};
+
+			for (uint32_t i = 0; i < g_State->meshCount; ++i)
+			{
+				const GPUMesh& gpuMesh = g_State->meshes[i];
+
+				geometryDesc[i].mFlags = ::ACCELERATION_STRUCTURE_GEOMETRY_FLAG_OPAQUE;
+				geometryDesc[i].pVertexBuffer = g_State->vertexBuffer;
+				geometryDesc[i].mVertexCount = gpuMesh.vertexCount;
+				geometryDesc[i].mVertexStride = sizeof(MeshVertex);
+				geometryDesc[i].mVertexOffset = gpuMesh.vertexOffset * sizeof(MeshVertex);
+				geometryDesc[i].mVertexFormat = ::TinyImageFormat_R32G32B32_SFLOAT;
+				geometryDesc[i].pIndexBuffer = g_State->indexBuffer;
+				geometryDesc[i].mIndexCount = gpuMesh.indexCount;
+				geometryDesc[i].mIndexOffset = gpuMesh.indexOffset * sizeof(uint32_t);
+				geometryDesc[i].mIndexType = ::INDEX_TYPE_UINT32;
+			}
+
+			desc.mBottom.mDescCount = g_State->meshCount;
+			desc.mBottom.pGeometryDescs = geometryDesc;
+			desc.mType = ::ACCELERATION_STRUCTURE_TYPE_BOTTOM;
+			desc.mFlags = ::ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+			::addAccelerationStructure(g_State->raytracing, &desc, &g_State->blas);
+
+			::GpuCmdRingElement elem = ::getNextGpuCmdRingElement(&g_State->graphicsCmdRing, true, 1);
+			::resetCmdPool(g_State->renderer, elem.pCmdPool);
+
+			::RaytracingBuildASDesc buildASDesc = {};
+			buildASDesc.pAccelerationStructure = g_State->blas;
+			buildASDesc.mIssueRWBarrier = true;
+			::beginCmd(elem.pCmds[0]);
+			::cmdBuildAccelerationStructure(elem.pCmds[0], g_State->raytracing, &buildASDesc);
+
+			::endCmd(elem.pCmds[0]);
+
+			::QueueSubmitDesc submitDesc = {};
+			submitDesc.mCmdCount = 1;
+			submitDesc.ppCmds = elem.pCmds;
+			submitDesc.pSignalFence = elem.pFence;
+			submitDesc.mSubmitDone = true;
+			::queueSubmit(g_State->graphicsQueue, &submitDesc);
+			::waitForFences(g_State->renderer, 1, &elem.pFence);
+
+			::removeAccelerationStructureScratch(g_State->raytracing, g_State->blas);
+		}
+
 		return true;
 	}
 
@@ -601,12 +677,19 @@ namespace renderer
 			::removeResource(g_State->upsampleUniformBuffers[i]);
 		}
 
+		if (g_State->raytracingTechniqueSupported[(uint32_t)RaytracingTechnique::RAY_QUERY])
+		{
+			::removeAccelerationStructure(g_State->raytracing, g_State->blas);
+			::removeAccelerationStructure(g_State->raytracing, g_State->tlas);
+		}
+
 		::exitGpuCmdRing(g_State->renderer, &g_State->graphicsCmdRing);
 		::exitSemaphore(g_State->renderer, g_State->imageAcquiredSemaphore);
 		::exitResourceLoaderInterface(g_State->renderer);
 
 		::exitQueue(g_State->renderer, g_State->graphicsQueue);
 
+		::exitRaytracing(g_State->renderer, g_State->raytracing);
 		::exitRenderer(g_State->renderer);
 		::exitGPUConfiguration();
 		::exitLog();
@@ -796,6 +879,52 @@ namespace renderer
 			gpuLight->range = light->range;
 			gpuLight->color = ::srgbToLinearf3(light->color);
 			gpuLight->intensity = light->intensity;
+		}
+
+		// TLAS Creation
+		{
+			::AccelerationStructureInstanceDesc* instanceDescs = (::AccelerationStructureInstanceDesc*)tf_malloc(sizeof(AccelerationStructureInstanceDesc) * g_State->instanceCount);
+			memset(instanceDescs, 0, sizeof(AccelerationStructureInstanceDesc)* g_State->instanceCount);
+			for (uint32_t i = 0; i < g_State->instanceCount; i++)
+			{
+				const GPUInstance& instance = g_State->instances[i];
+
+				instanceDescs[i].mFlags = ::ACCELERATION_STRUCTURE_INSTANCE_FLAG_NONE;
+				instanceDescs[i].mInstanceContributionToHitGroupIndex = 0;
+				instanceDescs[i].mInstanceID = i;
+				instanceDescs[i].mInstanceMask = 1;
+				instanceDescs[i].pBottomAS = g_State->blas;
+				memcpy(instanceDescs[i].mTransform, &instance.worldMat, sizeof(float[12]));
+			}
+
+			::AccelerationStructureDesc desc = {};
+			desc.mType = ::ACCELERATION_STRUCTURE_TYPE_TOP;
+			desc.mFlags = ::ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+			desc.mTop.mDescCount = g_State->instanceCount;
+			desc.mTop.pInstanceDescs = instanceDescs;
+			::addAccelerationStructure(g_State->raytracing, &desc, &g_State->tlas);
+
+			::GpuCmdRingElement elem = ::getNextGpuCmdRingElement(&g_State->graphicsCmdRing, true, 1);
+			::resetCmdPool(g_State->renderer, elem.pCmdPool);
+
+			::RaytracingBuildASDesc buildASDesc = {};
+			buildASDesc.pAccelerationStructure = g_State->tlas;
+			buildASDesc.mIssueRWBarrier = true;
+			::beginCmd(elem.pCmds[0]);
+			::cmdBuildAccelerationStructure(elem.pCmds[0], g_State->raytracing, &buildASDesc);
+
+			::endCmd(elem.pCmds[0]);
+
+			::QueueSubmitDesc submitDesc = {};
+			submitDesc.mCmdCount = 1;
+			submitDesc.ppCmds = elem.pCmds;
+			submitDesc.pSignalFence = elem.pFence;
+			submitDesc.mSubmitDone = true;
+			::queueSubmit(g_State->graphicsQueue, &submitDesc);
+			::waitForFences(g_State->renderer, 1, &elem.pFence);
+
+			::removeAccelerationStructureScratch(g_State->raytracing, g_State->tlas);
+			tf_free(instanceDescs);
 		}
 	}
 
@@ -2031,6 +2160,7 @@ void LoadMesh(RendererGeometry* geometry, const char* path, GPUMesh* mesh)
 
 		geometry->vertexCount += vertexCount;
 		mesh->indexCount = indexCount;
+		mesh->vertexCount = vertexCount;
 
 		tf_free(remap);
 	}

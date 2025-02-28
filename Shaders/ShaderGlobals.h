@@ -133,7 +133,7 @@ struct GPUMesh
     uint indexOffset;
     uint indexCount;
     uint vertexOffset;
-    uint _pad0;
+    uint vertexCount;
     float3 aabbMin;
     float _pad1;
     float3 aabbMax;
